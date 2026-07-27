@@ -7,13 +7,13 @@ import os
 
 # Page configuration
 st.set_page_config(
-    page_title="Управление дебиторской задолженностью",
+    page_title="Дашборд: Управление дебиторской задолженностью",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS styling for corporate look (КРАЙВИН style)
+# Custom CSS styling for corporate look
 st.markdown("""
     <style>
     .main {
@@ -32,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Управление дебиторской задолженностью")
+st.title("📊 Дашборд финансового анализа и управления дебиторской задолженностью")
 st.markdown("Инструмент контроля просроченной дебиторской задолженности (ПДЗ), анализа клиентов и претензионной работы.")
 
 # Sidebar for File Import & Controls
@@ -42,6 +42,18 @@ uploaded_file = st.sidebar.file_uploader("Загрузить файл отчет
 # Default fallback file if available in local workspace
 default_file = "Отчет по дебиторской задолженности 27.07.2026.xlsx"
 target_file = uploaded_file if uploaded_file is not None else (default_file if os.path.exists(default_file) else None)
+
+def format_rub(val):
+    """Форматирование чисел с разделителями тысяч (пробелы) и двумя знаками после запятой"""
+    if pd.isna(val):
+        return ""
+    return f"{val:,.2f}".replace(",", " ") + " ₽"
+
+def format_num(val):
+    """Форматирование чисел с разделителями тысяч без знака валюты"""
+    if pd.isna(val):
+        return ""
+    return f"{val:,.2f}".replace(",", " ")
 
 @st.cache_data
 def load_data(file):
@@ -141,9 +153,9 @@ if target_file is not None:
     overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0
     
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Общий портфель долга", f"{total_portfolio:,.2f} ₽")
-    col2.metric("Не просрочено", f"{total_not_overdue:,.2f} ₽", f"{100 - overdue_share:.1f}%")
-    col3.metric("Просрочено (ПДЗ)", f"{total_overdue:,.2f} ₽", f"{overdue_share:.1f}%", delta_color="inverse")
+    col1.metric("Общий портфель долга", f"{total_portfolio:,.2f}".replace(",", " ") + " ₽")
+    col2.metric("Не просрочено", f"{total_not_overdue:,.2f}".replace(",", " ") + " ₽", f"{100 - overdue_share:.1f}%")
+    col3.metric("Просрочено (ПДЗ)", f"{total_overdue:,.2f}".replace(",", " ") + " ₽", f"{overdue_share:.1f}%", delta_color="inverse")
     col4.metric("Активных клиентов", len(clients_list))
     
     st.markdown("---")
@@ -186,7 +198,15 @@ if target_file is not None:
             
     with tab2:
         st.subheader("Детальный реестр дебиторской задолженности")
-        st.dataframe(filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']], use_container_width=True)
+        
+        # Format display dataframe for better readability with thousand separators
+        display_df = filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].copy()
+        for col in ['Общий долг', 'Просрочено', 'Наш долг', 'К отгрузке', 'Не просрочено']:
+            display_df[col] = display_df[col].apply(lambda x: f"{x:,.2f}".replace(",", " ") if x > 0 else "")
+        display_df['Доля долга (%)'] = display_df['Доля долга (%)'].apply(lambda x: f"{x:.1f}%" if x > 0 else "")
+        display_df['Дней просрочки'] = display_df['Дней просрочки'].apply(lambda x: f"{int(x)}" if x > 0 else "")
+        
+        st.dataframe(display_df, use_container_width=True)
         
     with tab3:
         st.subheader("Экспорт отчета")
