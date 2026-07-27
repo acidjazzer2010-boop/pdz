@@ -206,22 +206,58 @@ if target_file is not None:
             hide_index=True
         )
         
-    with tab3:
+with tab3:
         st.subheader("Экспорт отчета")
-        st.markdown("Вы можете выгрузить актуальные и отфильтрованные данные в формате Excel или CSV.")
+        st.markdown("Вы можете выгрузить актуальные и отфильтрованные данные в формате Excel, CSV или интерактивного HTML-отчета.")
         
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_register.to_excel(writer, index=False, sheet_name='Реестр задолженности')
-            df_aging.to_excel(writer, index=False, sheet_name='Интервалы просрочки')
-        processed_data = output.getvalue()
+        col_ex1, col_ex2 = st.columns(2)
         
-        st.download_button(
-            label="📥 Скачать полный отчет вExcel",
-            data=processed_data,
-            file_name="Дебиторская_задолженность_анализ.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        with col_ex1:
+            # Excel export
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_register.to_excel(writer, index=False, sheet_name='Реестр задолженности')
+                df_aging.to_excel(writer, index=False, sheet_name='Интервалы просрочки')
+            excel_data = output.getvalue()
+            
+            st.download_button(
+                label="📥 Скачать отчет в Excel",
+                data=excel_data,
+                file_name="Дебиторская_задолженность_анализ.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            
+        with col_ex2:
+            # HTML export
+            html_content = f"""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Отчет по дебиторской задолженности</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
+                    h1 {{ color: #1F4E78; }}
+                    table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 14px; }}
+                    th, td {{ border: 1px solid #D9D9D9; padding: 8px 12px; text-align: left; }}
+                    th {{ background-color: #1F4E78; color: white; }}
+                    tr:nth-child(even) {{ background-color: #F9FAFB; }}
+                </style>
+            </head>
+            <body>
+                <h1>Отчет по дебиторской задолженности</h1>
+                <p>Дата актуальности: 27.07.2026 | Валюта: RUB</p>
+                <h3>Реестр задолженности</h3>
+                {filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].to_html(index=False, float_format=lambda x: f"{x:,.2f}" if isinstance(x, float) else str(x))}
+            </body>
+            </html>
+            """
+            
+            st.download_button(
+                label="🌐 Скачать отчет в HTML",
+                data=html_content.encode("utf-8"),
+                file_name="Дебиторская_задолженность_анализ.html",
+                mime="text/html"
+            )
         
 else:
     st.info("Пожалуйста, загрузите Excel-файл с отчетом через боковую панель слева, чтобы начать работу.")
