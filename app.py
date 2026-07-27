@@ -188,7 +188,6 @@ if target_file is not None:
         st.subheader("Детальный реестр дебиторской задолженности")
         st.markdown("💡 *Нажмите на заголовок любого столбца в таблице, чтобы отсортировать данные от меньшего к большему или от большего к меньшему.*")
         
-        # Prepare dataframe keeping numbers numeric for native sorting
         table_df = filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].copy()
         
         st.dataframe(
@@ -206,14 +205,13 @@ if target_file is not None:
             hide_index=True
         )
         
-with tab3:
+    with tab3:
         st.subheader("Экспорт отчета")
         st.markdown("Вы можете выгрузить актуальные и отфильтрованные данные в формате Excel, CSV или интерактивного HTML-отчета.")
         
         col_ex1, col_ex2 = st.columns(2)
         
         with col_ex1:
-            # Excel export
             output = BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df_register.to_excel(writer, index=False, sheet_name='Реестр задолженности')
@@ -228,7 +226,6 @@ with tab3:
             )
             
         with col_ex2:
-            # HTML export
             html_content = f"""
             <html>
             <head>
@@ -258,6 +255,5 @@ with tab3:
                 file_name="Дебиторская_задолженность_анализ.html",
                 mime="text/html"
             )
-        
 else:
     st.info("Пожалуйста, загрузите Excel-файл с отчетом через боковую панель слева, чтобы начать работу.")
