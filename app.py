@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from io import BytesIO
 import os
 
@@ -33,18 +32,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 Дашборд финансового анализа и управления дебиторской задолженностью")
-st.markdown("Инструмент контроля просроченной дебиторской задолженности (ПДЗ), анализа клиентов и претензионной работы.")
+st.markdown("Иерархический анализ просроченной дебиторской задолженности (ПДЗ) по клиентам и заказам.")
 
 # Sidebar for File Import & Controls
 st.sidebar.header("📁 Управление данными")
 uploaded_file = st.sidebar.file_uploader("Загрузить файл отчета (Excel)", type=["xlsx", "xls"])
 
-# Default fallback file if available in local workspace
 default_file = "Отчет по дебиторской задолженности 27.07.2026.xlsx"
 target_file = uploaded_file if uploaded_file is not None else (default_file if os.path.exists(default_file) else None)
 
 @st.cache_data
-def load_data(file):
+def load_hierarchy_data(file):
     df_raw = pd.read_excel(file, header=None)
     
     # Parse aging summary table (rows 9 to 15)
@@ -61,83 +59,86 @@ def load_data(file):
                 })
     df_aging = pd.DataFrame(aging_data)
     
-    # Parse detailed register (from row 21 onwards)
-    data_rows = []
+    # Parse hierarchical clients and orders
+    hierarchy = []
     current_client = None
+    current_client_data = None
     
     for idx, row in df_raw.iterrows():
         if idx < 21:
             continue
-        if idx == 92: # Итого
+        if idx == 93:
             break
         
         col_0 = row.iloc[0]
         col_2 = row.iloc[2]
-        col_9 = row.iloc[9]
-        col_11 = row.iloc[11]
-        col_13 = row.iloc[13]
-        col_14 = row.iloc[14]
-        col_15 = row.iloc[15]
-        col_16 = row.iloc[16]
-        col_17 = row.iloc[17]
-        col_18 = row.iloc[18]
-        col_19 = row.iloc[19]
         
-        if pd.notna(col_0) and isinstance(col_0, (int, float)) and not (isinstance(col_2, str) and col_2.startswith('Заказ')):
-            current_client = str(col_2).strip()
-            is_client = True
-        else:
-            is_client = False
-            
         def safe_float(val):
             try:
                 return float(val)
             except:
                 return 0.0
 
-        data_rows.append({
-            'row_idx': idx,
-            'is_client': is_client,
-            'Клиент': current_client,
-            'Объект расчетов': str(col_2).strip() if pd.notna(col_2) else '',
-            'Общий долг': safe_float(col_9),
-            'Доля долга (%)': safe_float(col_11),
-            'Просрочено': safe_float(col_13),
-            'Просрочено (%)': safe_float(col_14),
-            'Дней просрочки': safe_float(col_15),
-            'Наш долг': safe_float(col_16),
-            'К отгрузке': safe_float(col_17),
-            'Не просрочено': safe_float(col_18),
-            'Комментарий': str(col_19).strip() if pd.notna(col_19) else ''
-        })
+        if pd.notna(col_0) and isinstance(col_0, (int, float)) and not (isinstance(col_2, str) and col_2.startswith('Заказ')):
+            if current_client_data:
+                hierarchy.append(current_client_data)
+                
+            current_client = str(col_2).strip()
+            current_client_data = {
+                'Клиент': current_client,
+                'Общий долг': safe_float(row.iloc[9]),
+                'Доля долга (%)': safe_float(row.iloc[11]),
+                'Просрочено': safe_float(row.iloc[13]),
+                'Просрочено (%)': safe_float(row.iloc[14]),
+                'Дней просрочки': safe_float(row.iloc[15]),
+                'Наш долг': safe_float(row.iloc[16]),
+                'К отгрузке': safe_float(row.iloc[17]),
+                'Не просрочено': safe_float(row.iloc[18]),
+                'Комментарий': str(row.iloc[19]).strip() if pd.notna(row.iloc[19]) else '',
+                'Заказы': []
+            }
+        else:
+            if current_client_data is not None:
+                current_client_data['Заказы'].append({
+                    'Объект расчетов': str(col_2).strip() if pd.notna(col_2) else '',
+                    'Общий долг': safe_float(row.iloc[9]),
+                    'Просрочено': safe_float(row.iloc[13]),
+                    'Дней просрочки': safe_float(row.iloc[15]),
+                    'Наш долг': safe_float(row.iloc[16]),
+                    'К отгрузке': safe_float(row.iloc[17]),
+                    'Не просрочено': safe_float(row.iloc[18]),
+                    'Комментарий': str(row.iloc[19]).strip() if pd.notna(row.iloc[19]) else ''
+                })
+
+    if current_client_data:
+        hierarchy.append(current_client_data)
         
-    df_register = pd.DataFrame(data_rows)
-    return df_aging, df_register
+    return df_aging, hierarchy
 
 if target_file is not None:
-    df_aging, df_register = load_data(target_file)
+    df_aging, hierarchy = load_hierarchy_data(target_file)
+    
+    # Flatten clients summary for charts & metrics
+    clients_df = pd.DataFrame([{
+        'Клиент': c['Клиент'],
+        'Общий долг': c['Общий долг'],
+        'Просрочено': c['Просрочено'],
+        'Доля долга (%)': c['Доля долга (%)'],
+        'Дней просрочки': c['Дней просрочки'],
+        'Комментарий': c['Комментарий']
+    } for c in hierarchy])
     
     # Sidebar Filters
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔍 Фильтры")
     
-    clients_list = sorted(df_register[df_register['is_client']]['Клиент'].dropna().unique())
+    clients_list = sorted(clients_df['Клиент'].dropna().unique())
     selected_client = st.sidebar.selectbox("Выберите клиента", ["Все клиенты"] + list(clients_list))
     
-    min_days = st.sidebar.slider("Минимум дней просрочки", 0, int(df_register['Дней просрочки'].max()), 0)
-    
-    # Filter data
-    filtered_df = df_register.copy()
-    if selected_client != "Все клиенты":
-        client_rows = filtered_df[filtered_df['Клиент'] == selected_client]
-        filtered_df = client_rows
-        
-    filtered_df = filtered_df[filtered_df['Дней просрочки'] >= min_days]
-    
     # KPI Metrics
-    total_portfolio = df_register[df_register['is_client']]['Общий долг'].sum()
-    total_overdue = df_register[df_register['is_client']]['Просрочено'].sum()
-    total_not_overdue = df_register[df_register['is_client']]['Не просрочено'].sum()
+    total_portfolio = clients_df['Общий долг'].sum()
+    total_overdue = clients_df['Просрочено'].sum()
+    total_not_overdue = total_portfolio - total_overdue
     overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0
     
     col1, col2, col3, col4 = st.columns(4)
@@ -149,7 +150,7 @@ if target_file is not None:
     st.markdown("---")
     
     # Tabs for navigation
-    tab1, tab2, tab3 = st.tabs(["📈 Аналитика и Графики", "📋 Реестр задолженности", "⚙️ Экспорт данных"])
+    tab1, tab2, tab3 = st.tabs(["📈 Аналитика и Графики", "🌳 Иерархический реестр (Дерево)", "⚙️ Экспорт данных"])
     
     with tab1:
         st.subheader("Структура и динамика просроченной задолженности")
@@ -171,13 +172,13 @@ if target_file is not None:
             st.plotly_chart(fig_aging, use_container_width=True)
             
         with c2:
-            clients_summary = df_register[df_register['is_client']].sort_values(by='Общий долг', ascending=False).head(10)
+            top_clients = clients_df.sort_values(by='Общий долг', ascending=False).head(10)
             fig_clients = px.bar(
-                clients_summary,
+                top_clients,
                 x='Общий долг',
                 y='Клиент',
                 orientation='h',
-                title="ТОП-10 должников по общей сумме долга",
+                title="ТОП-10 клиентов по общей сумме долга",
                 color='Общий долг',
                 color_continuous_scale='Reds'
             )
@@ -185,75 +186,61 @@ if target_file is not None:
             st.plotly_chart(fig_clients, use_container_width=True)
             
     with tab2:
-        st.subheader("Детальный реестр дебиторской задолженности")
-        st.markdown("💡 *Нажмите на заголовок любого столбца в таблице, чтобы отсортировать данные от меньшего к большему или от большего к меньшему.*")
+        st.subheader("Иерархический реестр задолженности (Клиенты и Заказы)")
+        st.markdown("💡 *Каждый клиент представлен итоговой строкой. Разверните блок клиента, чтобы просмотреть детальные заказы.*")
         
-        table_df = filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].copy()
+        filtered_hierarchy = hierarchy if selected_client == "Все клиенты" else [c for c in hierarchy if c['Клиент'] == selected_client]
         
-        st.dataframe(
-            table_df,
-            column_config={
-                "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
-                "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
-                "Наш долг": st.column_config.NumberColumn("Наш долг (₽)", format="%,.2f ₽"),
-                "К отгрузке": st.column_config.NumberColumn("К отгрузке (₽)", format="%,.2f ₽"),
-                "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
-                "Доля долга (%)": st.column_config.NumberColumn("Доля долга (%)", format="%.1f%%"),
-                "Дней просрочки": st.column_config.NumberColumn("Дней просрочки", format="%d"),
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-        
+        for client in filtered_hierarchy:
+            with st.expander(f"📁 **{client['Клиент']}** — Всего долг: **{client['Общий долг']:,.2f} ₽** | Просрочено: **{client['Просрочено']:,.2f} ₽**"):
+                st.markdown(f"**Статус / Комментарий:** {client['Комментарий'] if client['Комментарий'] else 'Нет комментариев'}")
+                
+                orders_data = []
+                for order in client['Заказы']:
+                    orders_data.append({
+                        'Объект расчетов': order['Объект расчетов'],
+                        'Общий долг': order['Общий долг'],
+                        'Просрочено': order['Просрочено'],
+                        'Дней просрочки': order['Дней просрочки'],
+                        'Наш долг': order['Наш долг'],
+                        'К отгрузке': order['К отгрузке'],
+                        'Не просрочено': order['Не просрочено'],
+                        'Комментарий': order['Комментарий']
+                    })
+                
+                if orders_data:
+                    df_orders = pd.DataFrame(orders_data)
+                    st.dataframe(
+                        df_orders,
+                        column_config={
+                            "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
+                            "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
+                            "Наш долг": st.column_config.NumberColumn("Наш долг (₽)", format="%,.2f ₽"),
+                            "К отгрузке": st.column_config.NumberColumn("К отгрузке (₽)", format="%,.2f ₽"),
+                            "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
+                            "Дней просрочки": st.column_config.NumberColumn("Дней просрочки", format="%d"),
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.info("Детальные заказы отсутствуют.")
+                    
     with tab3:
         st.subheader("Экспорт отчета")
-        st.markdown("Вы можете выгрузить актуальные и отфильтрованные данные в формате Excel, CSV или интерактивного HTML-отчета.")
+        st.markdown("Вы можете выгрузить агрегированный и детализированный отчет.")
         
-        col_ex1, col_ex2 = st.columns(2)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            clients_df.to_excel(writer, index=False, sheet_name='Клиенты (Итоги)')
+            df_aging.to_excel(writer, index=False, sheet_name='Интервалы просрочки')
+        excel_data = output.getvalue()
         
-        with col_ex1:
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_register.to_excel(writer, index=False, sheet_name='Реестр задолженности')
-                df_aging.to_excel(writer, index=False, sheet_name='Интервалы просрочки')
-            excel_data = output.getvalue()
-            
-            st.download_button(
-                label="📥 Скачать отчет в Excel",
-                data=excel_data,
-                file_name="Дебиторская_задолженность_анализ.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-        with col_ex2:
-            html_content = f"""
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <title>Отчет по дебиторской задолженности</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
-                    h1 {{ color: #1F4E78; }}
-                    table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 14px; }}
-                    th, td {{ border: 1px solid #D9D9D9; padding: 8px 12px; text-align: left; }}
-                    th {{ background-color: #1F4E78; color: white; }}
-                    tr:nth-child(even) {{ background-color: #F9FAFB; }}
-                </style>
-            </head>
-            <body>
-                <h1>Отчет по дебиторской задолженности</h1>
-                <p>Дата актуальности: 27.07.2026 | Валюта: RUB</p>
-                <h3>Реестр задолженности</h3>
-                {filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].to_html(index=False, float_format=lambda x: f"{x:,.2f}" if isinstance(x, float) else str(x))}
-            </body>
-            </html>
-            """
-            
-            st.download_button(
-                label="🌐 Скачать отчет в HTML",
-                data=html_content.encode("utf-8"),
-                file_name="Дебиторская_задолженность_анализ.html",
-                mime="text/html"
-            )
+        st.download_button(
+            label="📥 Скачать сводный отчет по клиентам в Excel",
+            data=excel_data,
+            file_name="Сводный_отчет_клиенты.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 else:
     st.info("Пожалуйста, загрузите Excel-файл с отчетом через боковую панель слева, чтобы начать работу.")
