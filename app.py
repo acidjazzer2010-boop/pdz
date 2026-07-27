@@ -7,7 +7,7 @@ import os
 
 # Page configuration
 st.set_page_config(
-    page_title="Дашборд: Управление дебиторской задолженностью",
+    page_title="Управление дебиторской задолженностью",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -32,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Дашборд финансового анализа и управления дебиторской задолженностью")
+st.title("📊 Управление дебиторской задолженностью")
 st.markdown("Инструмент контроля просроченной дебиторской задолженности (ПДЗ), анализа клиентов и претензионной работы.")
 
 # Sidebar for File Import & Controls
