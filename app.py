@@ -43,18 +43,6 @@ uploaded_file = st.sidebar.file_uploader("Загрузить файл отчет
 default_file = "Отчет по дебиторской задолженности 27.07.2026.xlsx"
 target_file = uploaded_file if uploaded_file is not None else (default_file if os.path.exists(default_file) else None)
 
-def format_rub(val):
-    """Форматирование чисел с разделителями тысяч (пробелы) и двумя знаками после запятой"""
-    if pd.isna(val):
-        return ""
-    return f"{val:,.2f}".replace(",", " ") + " ₽"
-
-def format_num(val):
-    """Форматирование чисел с разделителями тысяч без знака валюты"""
-    if pd.isna(val):
-        return ""
-    return f"{val:,.2f}".replace(",", " ")
-
 @st.cache_data
 def load_data(file):
     df_raw = pd.read_excel(file, header=None)
@@ -198,15 +186,25 @@ if target_file is not None:
             
     with tab2:
         st.subheader("Детальный реестр дебиторской задолженности")
+        st.markdown("💡 *Нажмите на заголовок любого столбца в таблице, чтобы отсортировать данные от меньшего к большему или от большего к меньшему.*")
         
-        # Format display dataframe for better readability with thousand separators
-        display_df = filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].copy()
-        for col in ['Общий долг', 'Просрочено', 'Наш долг', 'К отгрузке', 'Не просрочено']:
-            display_df[col] = display_df[col].apply(lambda x: f"{x:,.2f}".replace(",", " ") if x > 0 else "")
-        display_df['Доля долга (%)'] = display_df['Доля долга (%)'].apply(lambda x: f"{x:.1f}%" if x > 0 else "")
-        display_df['Дней просрочки'] = display_df['Дней просрочки'].apply(lambda x: f"{int(x)}" if x > 0 else "")
+        # Prepare dataframe keeping numbers numeric for native sorting
+        table_df = filtered_df[['Клиент', 'Объект расчетов', 'Общий долг', 'Доля долга (%)', 'Просрочено', 'Дней просрочки', 'Наш долг', 'К отгрузке', 'Не просрочено', 'Комментарий']].copy()
         
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(
+            table_df,
+            column_config={
+                "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
+                "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
+                "Наш долг": st.column_config.NumberColumn("Наш долг (₽)", format="%,.2f ₽"),
+                "К отгрузке": st.column_config.NumberColumn("К отгрузке (₽)", format="%,.2f ₽"),
+                "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
+                "Доля долга (%)": st.column_config.NumberColumn("Доля долга (%)", format="%.1f%%"),
+                "Дней просрочки": st.column_config.NumberColumn("Дней просрочки", format="%d"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
         
     with tab3:
         st.subheader("Экспорт отчета")
@@ -219,7 +217,7 @@ if target_file is not None:
         processed_data = output.getvalue()
         
         st.download_button(
-            label="📥 Скачать полный отчет в Excel",
+            label="📥 Скачать полный отчет вExcel",
             data=processed_data,
             file_name="Дебиторская_задолженность_анализ.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
