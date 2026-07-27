@@ -900,6 +900,29 @@ streamlit run app.py
 
 После этого у вас появится постоянная публичная ссылка на ваш интерактивный веб-дашборд с возможностью загрузки новых отчетов и скачивания готового экспорта.
 
+Script execution error
+
+File "/mount/src/pdz/app.py", line 40
+
+подготовь изображение для сайта, увеличить разрешение до 4k
+
+^
+
+SyntaxError: invalid decimal literal
+
+Ошибка синтаксиса возникла из-за случайного попадания лишнего текста в файл скрипта. Я полностью пересоздал чистый и проверенный файл app.py.
+
+Значок PY-файла
+app
+ PY 
+Открыть
+Что было исправлено:
+Удалены любые некорректные символы и посторонний текст в теле скрипта.
+
+Проверена правильность отступов Python (PEP8).
+
+Приложение полностью готово к запуску на Streamlit Cloud и GitHub без ошибок компиляции.
+
 
 
 
@@ -910,6 +933,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
+import os
 
 # Page configuration
 st.set_page_config(
@@ -947,8 +971,6 @@ uploaded_file = st.sidebar.file_uploader("Загрузить файл отчет
 
 # Default fallback file if available in local workspace
 default_file = "Отчет по дебиторской задолженности 27.07.2026.xlsx"
-import os
-
 target_file = uploaded_file if uploaded_file is not None else (default_file if os.path.exists(default_file) else None)
 
 @st.cache_data
@@ -1037,9 +1059,7 @@ if target_file is not None:
     # Filter data
     filtered_df = df_register.copy()
     if selected_client != "Все клиенты":
-        # Filter for client and their orders
         client_rows = filtered_df[filtered_df['Клиент'] == selected_client]
-        client_name = selected_client
         filtered_df = client_rows
         
     filtered_df = filtered_df[filtered_df['Дней просрочки'] >= min_days]
@@ -1102,7 +1122,6 @@ if target_file is not None:
         st.subheader("Экспорт отчета")
         st.markdown("Вы можете выгрузить актуальные и отфильтрованные данные в формате Excel или CSV.")
         
-        # Export to Excel function
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_register.to_excel(writer, index=False, sheet_name='Реестр задолженности')
