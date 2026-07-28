@@ -291,7 +291,6 @@ if target_file is not None:
             
         with col_exp2:
             st.markdown("### 📧 Отправить по электронной почте")
-            st.markdown("Отправка отчета")
             
             recipient_input = st.text_input("Email получателя", value="boss@company.ru")
             
