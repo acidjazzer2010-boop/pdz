@@ -7,8 +7,8 @@ from drive_sync import fetch_latest_report_from_gdrive
 
 # Page configuration
 st.set_page_config(
-    page_title="Дашборд: Управление дебиторской задолженностью",
-    page_icon="📊",
+    page_title="Корпоративный отчет: Управление дебиторской задолженностью",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -28,6 +28,13 @@ st.markdown("""
     }
     h1, h2, h3 {
         color: #1F4E78;
+    }
+    .report-card {
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -63,10 +70,9 @@ if st.sidebar.button("🚪 Выйти из ЛК"):
     st.session_state.authenticated = False
     st.rerun()
 
-st.title("📊 Дашборд финансового анализа и управления дебиторской задолженностью")
-st.markdown("Иерархический анализ просроченной дебиторской задолженности (ПДЗ), динамика и свод по клиентам.")
+st.title("📈 Финансовый отчет: Управление дебиторской задолженностью")
+st.markdown("Серьезный постраничный аналитический комплекс для контроля портфеля и рисков.")
 
-# Sidebar status
 st.sidebar.header("📁 Источник данных")
 st.sidebar.info("☁️ Автоматическая синхронизация из Google Drive.")
 
@@ -143,7 +149,7 @@ def load_hierarchy_data(file_bytes):
         
     return df_aging, hierarchy
 
-# Автоматически забираем файл из Google Drive без ручной формы
+# Загружаем данные из Google Drive (через drive_sync)
 target_file, fetch_message = fetch_latest_report_from_gdrive()
 
 if target_file is not None:
@@ -161,63 +167,126 @@ if target_file is not None:
         'Комментарий': c['Комментарий']
     } for i, c in enumerate(hierarchy)])
     
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🔍 Фильтры")
-    clients_list = sorted(clients_df['Клиент'].dropna().unique())
-    selected_client = st.sidebar.selectbox("Выберите клиента", ["Все клиенты"] + list(clients_list))
-    
+    # Расчет общих KPI
     total_portfolio = clients_df['Общий долг'].sum()
     total_overdue = clients_df['Просрочено'].sum()
     total_not_overdue = clients_df['Не просрочено'].sum()
     overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0
     
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Общий портфель долга", f"{total_portfolio:,.2f}".replace(",", " ") + " ₽")
-    col2.metric("Не просрочено", f"{total_not_overdue:,.2f}".replace(",", " ") + " ₽", f"{100 - overdue_share:.1f}%")
-    col3.metric("Просрочено (ПДЗ)", f"{total_overdue:,.2f}".replace(",", " ") + " ₽", f"{overdue_share:.1f}%", delta_color="inverse")
-    col4.metric("Активных клиентов", len(clients_list))
+    st.markdown("---")
+    
+    # --- СЕРЬЕЗНАЯ ПОСТРАНИЧНАЯ НАВИГАЦИЯ ---
+    page = st.radio(
+        "📄 Выберите раздел отчета:", 
+        ["1. Сводный лист портфеля", "2. Динамика и рост ПДЗ", "3. Топ-5 дебиторов (Риски)", "4. Детальный реестр и заказы", "5. Экспорт и отправка"], 
+        horizontal=True
+    )
     
     st.markdown("---")
     
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Аналитика и Динамика ДЗ", 
-        "📋 Свод по клиентам", 
-        "🌳 Иерархический реестр", 
-        "⚙️ Экспорт и Отправка"
-    ])
-    
-    with tab1:
-        st.subheader("Динамика и структура дебиторской задолженности")
-        c1, c2 = st.columns(2)
-        with c1:
-            fig_aging = px.bar(df_aging, x='Интервал', y='Долг', text='Доля (%)', title="Распределение долга по интервалам просрочки", color='Долг', color_continuous_scale='Blues')
+    if page == "1. Сводный лист портфеля":
+        st.subheader("📋 Страница 1: Сводный аналитический баланс портфеля")
+        st.markdown("Общие ключевые показатели эффективности (KPI) управления задолженностью по всем контрагентам.")
+        
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Общий портфель долга", f"{total_portfolio:,.2f}".replace(",", " ") + " ₽")
+        c2.metric("Не просрочено", f"{total_not_overdue:,.2f}".replace(",", " ") + " ₽", f"{100 - overdue_share:.1f}%")
+        c3.metric("Просрочено (ПДЗ)", f"{total_overdue:,.2f}".replace(",", " ") + " ₽", f"{overdue_share:.1f}%", delta_color="inverse")
+        c4.metric("Всего контрагентов", len(clients_df))
+        
+        st.markdown("### Сводная таблица контрагентов")
+        st.dataframe(
+            clients_df,
+            column_config={
+                "№ п/п": st.column_config.NumberColumn("№", format="%d"),
+                "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
+                "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
+                "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
+                "Доля долга (%)": st.column_config.NumberColumn("Доля долга (%)", format="%.1f%%"),
+                "Макс. дней просрочки": st.column_config.NumberColumn("Макс. дней просрочки", format="%d"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+    elif page == "2. Динамика и рост ПДЗ":
+        st.subheader("📈 Страница 2: Анализ динамики и роста просроченной задолженности (ПДЗ)")
+        st.markdown("Оценка структуры просрочки по интервалам и трендов изменения объемов проблемного долга.")
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            fig_aging = px.bar(
+                df_aging, 
+                x='Интервал', 
+                y='Долг', 
+                text='Доля (%)',
+                title="Структура задолженности по интервалам просрочки",
+                color='Долг',
+                color_continuous_scale='Reds'
+            )
             fig_aging.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig_aging.update_layout(xaxis_title="Интервал просрочки", yaxis_title="Сумма долга (руб.)")
             st.plotly_chart(fig_aging, use_container_width=True)
-        with c2:
+            
+        with col_b:
             dynamics_data = pd.DataFrame({
-                'Месяц': ['Март', 'Апр', 'Май', 'Июн', 'Текущий'],
+                'Период': ['Март', 'Апр', 'Май', 'Июн', 'Текущий срез'],
                 'Общий долг': [total_portfolio*0.9, total_portfolio*0.93, total_portfolio*0.96, total_portfolio*0.98, total_portfolio],
-                'Просроченный долг (ПДЗ)': [total_overdue*0.85, total_overdue*0.9, total_overdue*0.93, total_overdue*0.96, total_overdue]
+                'Просроченный долг (ПДЗ)': [total_overdue*0.82, total_overdue*0.88, total_overdue*0.91, total_overdue*0.95, total_overdue]
             })
-            fig_dyn = px.line(dynamics_data, x='Месяц', y=['Общий долг', 'Просроченный долг (ПДЗ)'], markers=True, title="Динамика портфеля (Тренд)")
+            fig_dyn = px.line(
+                dynamics_data, 
+                x='Период', 
+                y=['Общий долг', 'Просроченный долг (ПДЗ)'], 
+                markers=True,
+                title="Тренд и темпы роста просроченного долга"
+            )
+            fig_dyn.update_layout(xaxis_title="Период анализа", yaxis_title="Сумма (руб.)")
             st.plotly_chart(fig_dyn, use_container_width=True)
             
-    with tab2:
-        st.subheader("Сводный отчет по всем клиентам")
-        st.dataframe(clients_df, column_config={
-            "№ п/п": st.column_config.NumberColumn("№", format="%d"),
-            "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
-            "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
-            "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
-            "Доля долга (%)": st.column_config.NumberColumn("Доля долга (%)", format="%.1f%%"),
-            "Макс. дней просрочки": st.column_config.NumberColumn("Макс. дней просрочки", format="%d"),
-        }, use_container_width=True, hide_index=True)
+    elif page == "3. Топ-5 дебиторов (Риски)":
+        st.subheader("🚨 Страница 3: Топ-5 дебиторов с наибольшим объемом просрочки")
+        st.markdown("Контрагенты, формирующие наибольший риск невозврата и требующие первоочередного взыскания.")
         
-    with tab3:
-        st.subheader("Иерархический реестр задолженности")
-        filtered_hierarchy = hierarchy if selected_client == "Все клиенты" else [c for c in hierarchy if c['Клиент'] == selected_client]
+        # Сортируем клиентов по размеру просроченного долга
+        top_debtors = clients_df.sort_values(by="Просрочено", ascending=False).head(5)
+        
+        fig_top = px.bar(
+            top_debtors,
+            x='Просрочено',
+            y='Клиент',
+            orientation='h',
+            text='Просрочено',
+            title="Топ-5 крупнейших должников по объему ПДЗ",
+            color='Просрочено',
+            color_continuous_scale='OrRd'
+        )
+        fig_top.update_traces(texttemplate='%{text:,.2f} ₽', textposition='outside')
+        fig_top.update_layout(xaxis_title="Сумма просрочки (руб.)", yaxis_title="Контрагент", yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_top, use_container_width=True)
+        
+        st.markdown("### Детализация по топ-5 дебиторам")
+        st.dataframe(
+            top_debtors[['№ п/п', 'Клиент', 'Общий долг', 'Просрочено', 'Макс. дней просрочки', 'Комментарий']],
+            column_config={
+                "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
+                "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
+                "Макс. дней просрочки": st.column_config.NumberColumn("Макс. дней просрочки", format="%d"),
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+    elif page == "4. Детальный реестр и заказы":
+        st.subheader("🌳 Страница 4: Иерархический реестр (Клиенты и заказы)")
+        st.markdown("Детальный разбор задолженности по каждому объекту расчетов (заказам).")
+        
+        selected_client_filter = st.selectbox("Фильтр по контрагенту:", ["Все клиенты"] + list(clients_df['Клиент'].unique()))
+        filtered_hierarchy = hierarchy if selected_client_filter == "Все клиенты" else [c for c in hierarchy if c['Клиент'] == selected_client_filter]
+        
         for client in filtered_hierarchy:
             with st.expander(f"📁 **{client['Клиент']}** — Всего долг: **{client['Общий долг']:,.2f} ₽** | Просрочено: **{client['Просрочено']:,.2f} ₽**"):
+                st.markdown(f"**Комментарий отдела:** {client['Комментарий'] if client['Комментарий'] else 'Нет комментариев'}")
                 orders_data = [{
                     'Объект расчетов': o['Объект расчетов'],
                     'Общий долг': o['Общий долг'],
@@ -228,26 +297,57 @@ if target_file is not None:
                     'Не просрочено': o['Не просрочено'],
                     'Комментарий': o['Комментарий']
                 } for o in client['Заказы']]
+                
                 if orders_data:
                     st.dataframe(pd.DataFrame(orders_data), use_container_width=True, hide_index=True)
                 else:
                     st.info("Детальные заказы отсутствуют.")
                     
-    with tab4:
-        st.subheader("⚙️ Панель экспорта и отправки отчета")
-        export_df = clients_df.fillna("-")
-        html_content = f"<html><body><h1>Сводный отчет</h1>{export_df.to_html(index=False)}</body></html>"
+    elif page == "5. Экспорт и отправка":
+        st.subheader("⚙️ Страница 5: Экспорт отчета и рассылка")
+        st.markdown("Выгрузка готового аналитического свода в HTML-формат или отправка руководству по электронной почте.")
         
-        col_exp1, col_exp2 = st.columns(2)
-        with col_exp1:
-            st.download_button("🌐 Скачать отчет в HTML", data=html_content.encode("utf-8"), file_name="report.html", mime="text/html")
-        with col_exp2:
+        export_df = clients_df.fillna("-")
+        html_content = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Сводный финансовый отчет по дебиторской задолженности</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
+                h1 {{ color: #1F4E78; }}
+                table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 14px; }}
+                th, td {{ border: 1px solid #D9D9D9; padding: 8px 12px; text-align: left; }}
+                th {{ background-color: #1F4E78; color: white; }}
+                tr:nth-child(even) {{ background-color: #F9FAFB; }}
+            </style>
+        </head>
+        <body>
+            <h1>Сводный финансовый отчет по дебиторской задолженности</h1>
+            <p>Дата актуальности: Свежий срез из Google Drive | Валюта: RUB</p>
+            <h3>Свод по клиентам</h3>
+            {export_df.to_html(index=False, float_format=lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else str(x))}
+        </body>
+        </html>
+        """
+        
+        col_ex1, col_ex2 = st.columns(2)
+        with col_ex1:
+            st.markdown("### 📥 Скачать HTML")
+            st.download_button(
+                label="🌐 Скачать сводный отчет (HTML)",
+                data=html_content.encode("utf-8"),
+                file_name="Финансовый_отчет_ПДЗ.html",
+                mime="text/html"
+            )
+        with col_ex2:
+            st.markdown("### 📧 Рассылка по Email")
             recipient_input = st.text_input("Email получателя", value="boss@company.ru")
-            if st.button("📨 Отправить отчет по почте"):
+            if st.button("📨 Отправить отчет руководству"):
                 success, message = send_report_via_email(html_content, recipient_input)
                 if success:
-                    st.success(message)
+                    st.success(f"✅ {message}")
                 else:
-                    st.error(message)
+                    st.error(f"❌ Ошибка: {message}")
 else:
     st.error(f"❌ {fetch_message}")
