@@ -5,31 +5,47 @@ import streamlit as st
 
 def send_report_via_email(html_content, recipient_email, smtp_config=None, subject="Сводный отчет по дебиторской задолженности"):
     """
-    Отправляет HTML-отчет на электронную почту.
-    Сначала проверяет st.secrets на сервере, если их нет — использует переданные настройки.
+    Отправляет HTML-отчет на электронную почту с поддержкой st.secrets (как flat, так и nested) или ручного ввода.
     """
     try:
-        # Проверяем секреты на сервере Streamlit
-        if "smtp" in st.secrets:
-            smtp_server = st.secrets["smtp"]["server"]
-            smtp_port = int(st.secrets["smtp"]["port"])
-            sender_email = st.secrets["smtp"]["sender_email"]
-            sender_password = st.secrets["smtp"]["sender_password"]
+        smtp_server = None
+        smtp_port = None
+        sender_email = None
+        sender_password = None
+
+        # 1. Проверяем flat секреты (как ввел пользователь: SMTP_SERVER, etc.)
+        if "SMTP_SERVER" in st.secrets:
+            smtp_server = st.secrets["SMTP_SERVER"]
+            smtp_port = int(st.secrets.get("SMTP_PORT", 465))
+            sender_email = st.secrets.get("SMTP_USER", "")
+            sender_password = st.secrets.get("SMTP_PASSWORD", "")
+        # 2. Проверяем вложенные секреты [smtp]
+        elif "smtp" in st.secrets:
+            smtp_server = st.secrets["smtp"].get("server")
+            smtp_port = int(st.secrets["smtp"].get("port", 465))
+            sender_email = st.secrets["smtp"].get("sender_email") or st.secrets["smtp"].get("user")
+            sender_password = st.secrets["smtp"].get("sender_password") or st.secrets["smtp"].get("password")
+        # 3. Используем ручной ввод из формы
         elif smtp_config:
-            # Используем данные из формы ручного ввода
             smtp_server = smtp_config["server"]
             smtp_port = int(smtp_config["port"])
             sender_email = smtp_config["sender_email"]
             sender_password = smtp_config["sender_password"]
-        else:
-            return False, "Не заданы настройки SMTP (проверьте st.secrets или поля ввода)."
+
+        if not smtp_server or not sender_email or not sender_password:
+            return False, "Не удалось найти параметры SMTP. Проверьте st.secrets или поля ввода."
 
         msg = MIMEMultipart()
         msg['From'] = sender_email
         msg['To'] = recipient_email
         msg['Subject'] = subject
         
-        msg.attach(MIMEText("Здравствуйте!\n\nВо вложении находится актуальный сводный отчет по управлению дебиторской задолженностью.\n\nС уважением,\nФинансовый отдел", 'plain'))
+        msg.attach(MIMEText("Здравствуйте!
+
+Во вложении находится актуальный сводный отчет по управлению дебиторской задолженностью.
+
+С уважением,
+Финансовый отдел", 'plain'))
         
         html_attachment = MIMEText(html_content, 'html', 'utf-8')
         html_attachment.add_header('Content-Disposition', 'attachment', filename='debt_report.html')
