@@ -59,19 +59,17 @@ def load_hierarchy_data(file_bytes):
     
     # Parse hierarchical clients and orders
     hierarchy = []
-    current_client = None
     current_client_data = None
     
     for idx, row in df_raw.iterrows():
         if idx < 21:
             continue
-        if idx >= len(df_raw) - 1: # Stop before total row if dynamic
+        if idx >= len(df_raw) - 1:
             break
             
         col_0 = row.iloc[0]
         col_2 = row.iloc[2]
         
-        # Check if row is 'Итого'
         if str(col_2).strip() == "Итого" or str(row.iloc[9]).strip() == "Итого":
             break
         
@@ -85,9 +83,8 @@ def load_hierarchy_data(file_bytes):
             if current_client_data:
                 hierarchy.append(current_client_data)
                 
-            current_client = str(col_2).strip()
             current_client_data = {
-                'Клиент': current_client,
+                'Клиент': str(col_2).strip(),
                 'Общий долг': safe_float(row.iloc[9]),
                 'Доля долга (%)': safe_float(row.iloc[11]),
                 'Просрочено': safe_float(row.iloc[13]),
@@ -294,6 +291,7 @@ if uploaded_file is not None:
             has_server_secrets = "SMTP_SERVER" in st.secrets or "smtp" in st.secrets
             
             if has_server_secrets:
+                st.info("🔒 Настройки SMTP автоматически загружены из секретов сервера (`st.secrets`).")
                 recipient_input = st.text_input("Email получателя", value="boss@company.ru")
                 
                 if st.button("📨 Отправить отчет по почте"):
