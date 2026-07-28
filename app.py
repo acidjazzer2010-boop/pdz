@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from io import BytesIO
 from exporter import send_report_via_email
+from drive_sync import fetch_latest_report_from_gdrive
 
 # Page configuration
 st.set_page_config(
@@ -35,9 +35,9 @@ st.markdown("""
 st.title("📊 Дашборд финансового анализа и управления дебиторской задолженностью")
 st.markdown("Иерархический анализ просроченной дебиторской задолженности (ПДЗ), динамика и свод по клиентам.")
 
-# Sidebar for File Import & Controls
-st.sidebar.header("📁 Управление данными")
-uploaded_file = st.sidebar.file_uploader("Загрузить свежий файл отчета (Excel)", type=["xlsx", "xls"])
+# Sidebar status & auto-fetch
+st.sidebar.header("📁 Источник данных")
+st.sidebar.info("☁️ Режим автоматического получения отчетов из папки Google Drive.")
 
 @st.cache_data
 def load_hierarchy_data(file_bytes):
@@ -114,8 +114,12 @@ def load_hierarchy_data(file_bytes):
         
     return df_aging, hierarchy
 
-if uploaded_file is not None:
-    df_aging, hierarchy = load_hierarchy_data(uploaded_file)
+# Automatically fetch file from Google Drive
+file_obj, fetch_message = fetch_latest_report_from_gdrive()
+
+if file_obj is not None:
+    st.sidebar.success(fetch_message)
+    df_aging, hierarchy = load_hierarchy_data(file_obj)
     
     clients_df = pd.DataFrame([{
         '№ п/п': i + 1,
@@ -288,26 +292,13 @@ if uploaded_file is not None:
             
         with col_exp2:
             st.markdown("### 📧 Отправить по электронной почте")
-            has_server_secrets = "SMTP_SERVER" in st.secrets or "smtp" in st.secrets
-            
             recipient_input = st.text_input("Email получателя", value="boss@company.ru")
             
             if st.button("📨 Отправить отчет по почте"):
-                if has_server_secrets:
-                    success, message = send_report_via_email(html_content, recipient_input)
-                else:
-                    # Резервный вариант на случай локального тестирования без st.secrets
-                    config = {
-                        "server": "smtp.yandex.ru",
-                        "port": 465,
-                        "sender_email": "user@yandex.ru",
-                        "sender_password": "password"
-                    }
-                    success, message = send_report_via_email(html_content, recipient_input, smtp_config=config)
-                    
+                success, message = send_report_via_email(html_content, recipient_input)
                 if success:
                     st.success(f"✅ {message}")
                 else:
                     st.error(f"❌ Ошибка: {message}")
 else:
-    st.info("👈 Пожалуйста, загрузите файл отчета Excel через боковую панель слева, чтобы начать работу с дашбордом.")
+    st.error(f"❌ Не удалось загрузить файл из Google Drive. Убедитесь, что параметр `GDRIVE_FILE_ID` прописан в st.secrets на сервере Streamlit.")
