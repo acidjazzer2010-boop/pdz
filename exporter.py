@@ -3,21 +3,26 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import streamlit as st
 
-def send_report_via_email(html_content, recipient_email, subject="Сводный отчет по дебиторской задолженности"):
+def send_report_via_email(html_content, recipient_email, smtp_config=None, subject="Сводный отчет по дебиторской задолженности"):
     """
-    Отправляет HTML-отчет на электронную почту с использованием секретов Streamlit Cloud (st.secrets)
-    или введенных вручную параметров.
+    Отправляет HTML-отчет на электронную почту.
+    Сначала проверяет st.secrets на сервере, если их нет — использует переданные настройки.
     """
     try:
-        # Пытаемся взять настройки из st.secrets (сервер Streamlit)
+        # Проверяем секреты на сервере Streamlit
         if "smtp" in st.secrets:
             smtp_server = st.secrets["smtp"]["server"]
             smtp_port = int(st.secrets["smtp"]["port"])
             sender_email = st.secrets["smtp"]["sender_email"]
             sender_password = st.secrets["smtp"]["sender_password"]
+        elif smtp_config:
+            # Используем данные из формы ручного ввода
+            smtp_server = smtp_config["server"]
+            smtp_port = int(smtp_config["port"])
+            sender_email = smtp_config["sender_email"]
+            sender_password = smtp_config["sender_password"]
         else:
-            # Заглушка, если секреты не настроены локально
-            return False, "Секреты SMTP не настроены в st.secrets на сервере."
+            return False, "Не заданы настройки SMTP (проверьте st.secrets или поля ввода)."
 
         msg = MIMEMultipart()
         msg['From'] = sender_email
