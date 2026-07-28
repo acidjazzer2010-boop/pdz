@@ -294,7 +294,6 @@ if uploaded_file is not None:
             has_server_secrets = "SMTP_SERVER" in st.secrets or "smtp" in st.secrets
             
             if has_server_secrets:
-                st.info("🔒 Настройки SMTP автоматически загружены из секретов сервера (`st.secrets`).")
                 recipient_input = st.text_input("Email получателя", value="boss@company.ru")
                 
                 if st.button("📨 Отправить отчет по почте"):
