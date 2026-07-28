@@ -290,38 +290,24 @@ if uploaded_file is not None:
             st.markdown("### 📧 Отправить по электронной почте")
             has_server_secrets = "SMTP_SERVER" in st.secrets or "smtp" in st.secrets
             
-            if has_server_secrets:
-                st.info("🔒 Настройки SMTP автоматически загружены из секретов сервера (`st.secrets`).")
-                recipient_input = st.text_input("Email получателя", value="boss@company.ru")
-                
-                if st.button("📨 Отправить отчет по почте"):
+            recipient_input = st.text_input("Email получателя", value="boss@company.ru")
+            
+            if st.button("📨 Отправить отчет по почте"):
+                if has_server_secrets:
                     success, message = send_report_via_email(html_content, recipient_input)
-                    if success:
-                        st.success(f"✅ {message}")
-                    else:
-                        st.error(f"❌ Ошибка: {message}")
-            else:
-                st.warning("⚠️ Секреты SMTP не найдены. Введите параметры вручную:")
-                with st.form("manual_email_form"):
-                    m_server = st.text_input("SMTP Сервер", value="smtp.yandex.ru")
-                    m_port = st.number_input("SMTP Порт", value=465, step=1)
-                    m_sender = st.text_input("Email отправителя", value="user@yandex.ru")
-                    m_pass = st.text_input("Пароль приложения", type="password")
-                    m_recipient = st.text_input("Email получателя", value="boss@company.ru")
+                else:
+                    # Резервный вариант на случай локального тестирования без st.secrets
+                    config = {
+                        "server": "smtp.yandex.ru",
+                        "port": 465,
+                        "sender_email": "user@yandex.ru",
+                        "sender_password": "password"
+                    }
+                    success, message = send_report_via_email(html_content, recipient_input, smtp_config=config)
                     
-                    submit_manual = st.form_submit_button("📨 Отправить с ручными параметрами")
-                    
-                    if submit_manual:
-                        config = {
-                            "server": m_server,
-                            "port": m_port,
-                            "sender_email": m_sender,
-                            "sender_password": m_pass
-                        }
-                        success, message = send_report_via_email(html_content, m_recipient, smtp_config=config)
-                        if success:
-                            st.success(f"✅ {message}")
-                        else:
-                            st.error(f"❌ Ошибка: {message}")
+                if success:
+                    st.success(f"✅ {message}")
+                else:
+                    st.error(f"❌ Ошибка: {message}")
 else:
     st.info("👈 Пожалуйста, загрузите файл отчета Excel через боковую панель слева, чтобы начать работу с дашбордом.")
