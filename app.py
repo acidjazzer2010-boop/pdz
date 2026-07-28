@@ -271,18 +271,72 @@ if target_file is not None:
     elif page == "5. Экспорт и отправка":
         st.subheader("⚙️ Страница 5: Экспорт отчета и рассылка")
         
-        # Финансовое форматирование с разделителями тысяч (пробелы)
+        # Функция для финансового форматирования чисел с разделителями тысяч (пробелы)
         def format_ru_number(val):
-            if isinstance(val, (int, float)):
+            if isinstance(val, (int, float)) and pd.notna(val):
                 return f"{val:,.2f}".replace(",", " ").replace(".", ",")
-            return str(val)
+            return val
 
+        # Копируем датафрейм, исключая системный индекс Pandas
         export_df = clients_df.copy()
+        
+        # Форматируем числовые колонтитулы
         for col in export_df.columns:
             if export_df[col].dtype in ['float64', 'int64']:
                 export_df[col] = export_df[col].apply(format_ru_number)
         
-        export_df = export_df.fillna("-")
+        # Заменяем все NaN, None, "nan" на пустые строки или прочерки для чистоты таблицы
+        export_df = export_df.fillna("—")
+        export_df = export_df.replace("nan", "—")
+        
+        # HTML с кроссплатформенными системными шрифтами для macOS и Windows
+        html_content = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Сводный финансовый отчет по дебиторской задолженности</title>
+            <style>
+                body {{ 
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                    margin: 20px; 
+                    color: #333; 
+                }}
+                h1 {{ color: #1F4E78; font-size: 22px; }}
+                p {{ color: #595959; font-size: 14px; }}
+                table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 13px; }}
+                th, td {{ border: 1px solid #D9D9D9; padding: 10px 12px; text-align: left; }}
+                th {{ background-color: #1F4E78; color: white; font-weight: bold; }}
+                tr:nth-child(even) {{ background-color: #F9FAFB; }}
+                td:nth-child(n+3) {{ text-align: right; }}
+            </style>
+        </head>
+        <body>
+            <h1>Сводный финансовый отчет по дебиторской задолженности</h1>
+            <p>Дата актуальности: Свежий срез из Google Drive | Валюта: RUB</p>
+            <h3>Свод по контрагентам</h3>
+            {export_df.to_html(index=False)}
+        </body>
+        </html>
+        """
+        
+        col_ex1, col_ex2 = st.columns(2)
+        with col_ex1:
+            st.markdown("### 📥 Скачать HTML")
+            st.download_button(
+                label="🌐 Скачать сводный отчет (HTML)",
+                data=html_content.encode("utf-8"),
+                file_name="Финансовый_отчет_ПДЗ.html",
+                mime="text/html"
+            )
+        with col_ex2:
+            st.markdown("### 📧 Рассылка по Email")
+            recipient_input = st.text_input("Email получателя", value="boss@company.ru")
+            if st.button("📨 Отправить отчет руководству"):
+                success, message = send_report_via_email(html_content, recipient_input)
+                if success:
+                    st.success(f"✅ {message}")
+                else:
+                    st.error(f"❌ Ошибка: {message}")
         
         # HTML с кроссплатформенными системными шрифтами для macOS и Windows
         html_content = f"""
