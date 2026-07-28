@@ -40,7 +40,6 @@ if "authenticated" not in st.session_state:
     st.session_state.name = None
 
 def verify_credentials(username, password):
-    # Проверка по st.secrets с поддержкой нескольких пользователей
     users_dict = st.secrets.get("users", {
         "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
         "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер ПДЗ"}
@@ -72,8 +71,9 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль")
     st.stop()
 
-# Боковая панель профиля
-st.sidebar.success(f"👤 {st.session_state.name}\n🔑 Роль: **{st.session_state.role}**")
+# Боковая панель профиля (без лишних служебных текстов)
+st.sidebar.markdown(f"👤 **{st.session_state.name}**")
+st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 if st.sidebar.button("🚪 Выйти из системы"):
     st.session_state.authenticated = False
     st.session_state.username = None
@@ -82,11 +82,7 @@ if st.sidebar.button("🚪 Выйти из системы"):
     st.rerun()
 
 st.title("📈 Финансовый отчет: Управление дебиторской задолженностью")
-st.markdown("Контроль портфеля и рисков.")
-
-st.sidebar.markdown("---")
-st.sidebar.header("📁 Источник данных")
-st.sidebar.info("☁️ Автоматическая синхронизация из Google Drive.")
+st.markdown("Серьезный постраничный аналитический комплекс для контроля портфеля и рисков.")
 
 @st.cache_data
 def load_hierarchy_data(file_bytes):
@@ -161,10 +157,10 @@ def load_hierarchy_data(file_bytes):
         
     return df_aging, hierarchy
 
+# Тихо загружаем файл из Google Drive (без вывода технических сообщений в сайдбар)
 target_file, fetch_message = fetch_latest_report_from_gdrive()
 
 if target_file is not None:
-    st.sidebar.success(fetch_message)
     df_aging, hierarchy = load_hierarchy_data(target_file)
     
     clients_df = pd.DataFrame([{
@@ -185,7 +181,6 @@ if target_file is not None:
     
     st.markdown("---")
     
-    # Формируем постраничную навигацию (с разграничением по ролям, если нужно)
     available_pages = [
         "1. Сводный лист портфеля", 
         "2. Динамика и рост ПДЗ", 
@@ -193,7 +188,6 @@ if target_file is not None:
         "4. Детальный реестр и заказы"
     ]
     
-    # Директору доступен экспорт и рассылка, а обычным финансистам можно ограничить
     if st.session_state.role == "Директор":
         available_pages.append("5. Экспорт и отправка")
     
@@ -290,4 +284,4 @@ if target_file is not None:
                 else:
                     st.error(message)
 else:
-    st.error(f"❌ {fetch_message}")
+    st.error("❌ Не удалось получить файл отчета из Google Drive.")
