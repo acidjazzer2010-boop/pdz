@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from io import BytesIO
 from exporter import send_report_via_email
-from drive_sync import fetch_latest_report_from_gdrive
 
 # Page configuration
 st.set_page_config(
@@ -29,15 +29,58 @@ st.markdown("""
     h1, h2, h3 {
         color: #1F4E78;
     }
+    .login-container {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 30px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
     </style>
 """, unsafe_allow_html=True)
+
+# --- УПРАВЛЕНИЕ АВТОРИЗАЦИЕЙ (ЛК) ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+def check_login(username, password):
+    # Безопасная проверка из st.secrets или дефолтные значения для теста
+    correct_user = st.secrets.get("AUTH_USER", "admin")
+    correct_pass = st.secrets.get("AUTH_PASS", "krayvin2026")
+    return username == correct_user and password == correct_pass
+
+if not st.session_state.authenticated:
+    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #595959;'>Авторизуйтесь для доступа к дашборду управления дебиторской задолженностью</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        with st.form("login_form"):
+            username_input = st.text_input("Логин")
+            password_input = st.text_input("Пароль", type="password")
+            submit_button = st.form_submit_button("Войти в систему", use_container_width=True)
+            
+            if submit_button:
+                if check_login(username_input, password_input):
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("❌ Неверный логин или пароль")
+    st.stop() # Блокирует дальнейший показ дашборда до ввода правильных данных
+
+# --- ОСНОВНОЙ ФУНКЦИОНАЛ ПОСЛЕ ВХОДА ---
+st.sidebar.success("✅ Вы вошли в систему")
+if st.sidebar.button("🚪 Выйти из ЛК"):
+    st.session_state.authenticated = False
+    st.rerun()
 
 st.title("📊 Дашборд финансового анализа и управления дебиторской задолженностью")
 st.markdown("Иерархический анализ просроченной дебиторской задолженности (ПДЗ), динамика и свод по клиентам.")
 
-# Sidebar status & auto-fetch
-st.sidebar.header("📁 Источник данных")
-st.sidebar.info("☁️ Режим автоматического получения отчетов из папки Google Drive.")
+# Sidebar for File Import & Controls
+st.sidebar.header("📁 Управление данными")
+uploaded_file = st.sidebar.file_uploader("Загрузить свежий файл отчета (Excel)", type=["xlsx", "xls"])
 
 @st.cache_data
 def load_hierarchy_data(file_bytes):
@@ -114,12 +157,8 @@ def load_hierarchy_data(file_bytes):
         
     return df_aging, hierarchy
 
-# Automatically fetch file from Google Drive
-file_obj, fetch_message = fetch_latest_report_from_gdrive()
-
-if file_obj is not None:
-    st.sidebar.success(fetch_message)
-    df_aging, hierarchy = load_hierarchy_data(file_obj)
+if uploaded_file is not None:
+    df_aging, hierarchy = load_hierarchy_data(uploaded_file)
     
     clients_df = pd.DataFrame([{
         '№ п/п': i + 1,
@@ -301,4 +340,4 @@ if file_obj is not None:
                 else:
                     st.error(f"❌ Ошибка: {message}")
 else:
-    st.error(f"❌ Не удалось загрузить файл из Google Drive. Убедитесь, что параметр `GDRIVE_FILE_ID` прописан в st.secrets на сервере Streamlit.")
+    st.info("👈 Пожалуйста, загрузите файл отчета Excel через боковую панель слева, чтобы начать работу с дашбордом.")
