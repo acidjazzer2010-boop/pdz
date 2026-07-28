@@ -29,27 +29,30 @@ st.markdown("""
     h1, h2, h3 {
         color: #1F4E78;
     }
-    .report-card {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- АВТОРИЗАЦИЯ (ЛК) ---
+# --- МНОГОПОЛЬЗОВАТЕЛЬСКИЙ ЛК ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.role = None
+    st.session_state.name = None
 
-def check_login(username, password):
-    correct_user = st.secrets.get("AUTH_USER", "admin")
-    correct_pass = st.secrets.get("AUTH_PASS", "krayvin2026")
-    return username == correct_user and password == correct_pass
+def verify_credentials(username, password):
+    # Проверка по st.secrets с поддержкой нескольких пользователей
+    users_dict = st.secrets.get("users", {
+        "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
+        "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер ПДЗ"}
+    })
+    
+    if username in users_dict:
+        if users_dict[username]["password"] == password:
+            return True, users_dict[username]["role"], users_dict[username]["name"]
+    return False, None, None
 
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет корпоративной системы</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -58,21 +61,30 @@ if not st.session_state.authenticated:
             submit_button = st.form_submit_button("Войти в систему", use_container_width=True)
             
             if submit_button:
-                if check_login(username_input, password_input):
+                is_valid, role, name = verify_credentials(username_input, password_input)
+                if is_valid:
                     st.session_state.authenticated = True
+                    st.session_state.username = username_input
+                    st.session_state.role = role
+                    st.session_state.name = name
                     st.rerun()
                 else:
                     st.error("❌ Неверный логин или пароль")
     st.stop()
 
-st.sidebar.success("✅ Вы вошли в систему")
-if st.sidebar.button("🚪 Выйти из ЛК"):
+# Боковая панель профиля
+st.sidebar.success(f"👤 {st.session_state.name}\n🔑 Роль: **{st.session_state.role}**")
+if st.sidebar.button("🚪 Выйти из системы"):
     st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.role = None
+    st.session_state.name = None
     st.rerun()
 
-st.title("📈 ПДЗ: Управление дебиторской задолженностью")
-st.markdown("Отчет контроля портфеля и рисков.")
+st.title("📈 Финансовый отчет: Управление дебиторской задолженностью")
+st.markdown("Серьезный постраничный аналитический комплекс для контроля портфеля и рисков.")
 
+st.sidebar.markdown("---")
 st.sidebar.header("📁 Источник данных")
 st.sidebar.info("☁️ Автоматическая синхронизация из Google Drive.")
 
@@ -149,7 +161,6 @@ def load_hierarchy_data(file_bytes):
         
     return df_aging, hierarchy
 
-# Загружаем данные из Google Drive (через drive_sync)
 target_file, fetch_message = fetch_latest_report_from_gdrive()
 
 if target_file is not None:
@@ -167,7 +178,6 @@ if target_file is not None:
         'Комментарий': c['Комментарий']
     } for i, c in enumerate(hierarchy)])
     
-    # Расчет общих KPI
     total_portfolio = clients_df['Общий долг'].sum()
     total_overdue = clients_df['Просрочено'].sum()
     total_not_overdue = clients_df['Не просрочено'].sum()
@@ -175,19 +185,23 @@ if target_file is not None:
     
     st.markdown("---")
     
-    # --- СЕРЬЕЗНАЯ ПОСТРАНИЧНАЯ НАВИГАЦИЯ ---
-    page = st.radio(
-        "📄 Выберите раздел отчета:", 
-        ["1. Сводный лист портфеля", "2. Динамика и рост ПДЗ", "3. Топ-5 дебиторов (Риски)", "4. Детальный реестр и заказы", "5. Экспорт и отправка"], 
-        horizontal=True
-    )
+    # Формируем постраничную навигацию (с разграничением по ролям, если нужно)
+    available_pages = [
+        "1. Сводный лист портфеля", 
+        "2. Динамика и рост ПДЗ", 
+        "3. Топ-5 дебиторов (Риски)", 
+        "4. Детальный реестр и заказы"
+    ]
     
+    # Директору доступен экспорт и рассылка, а обычным финансистам можно ограничить
+    if st.session_state.role == "Директор":
+        available_pages.append("5. Экспорт и отправка")
+    
+    page = st.radio("📄 Выберите раздел отчета:", available_pages, horizontal=True)
     st.markdown("---")
     
     if page == "1. Сводный лист портфеля":
         st.subheader("📋 Страница 1: Сводный аналитический баланс портфеля")
-        st.markdown("Общие ключевые показатели эффективности (KPI) управления задолженностью по всем контрагентам.")
-        
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Общий портфель долга", f"{total_portfolio:,.2f}".replace(",", " ") + " ₽")
         c2.metric("Не просрочено", f"{total_not_overdue:,.2f}".replace(",", " ") + " ₽", f"{100 - overdue_share:.1f}%")
@@ -211,76 +225,33 @@ if target_file is not None:
         
     elif page == "2. Динамика и рост ПДЗ":
         st.subheader("📈 Страница 2: Анализ динамики и роста просроченной задолженности (ПДЗ)")
-        st.markdown("Оценка структуры просрочки по интервалам и трендов изменения объемов проблемного долга.")
-        
         col_a, col_b = st.columns(2)
         with col_a:
-            fig_aging = px.bar(
-                df_aging, 
-                x='Интервал', 
-                y='Долг', 
-                text='Доля (%)',
-                title="Структура задолженности по интервалам просрочки",
-                color='Долг',
-                color_continuous_scale='Reds'
-            )
+            fig_aging = px.bar(df_aging, x='Интервал', y='Долг', text='Доля (%)', title="Структура задолженности по интервалам просрочки", color='Долг', color_continuous_scale='Reds')
             fig_aging.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig_aging.update_layout(xaxis_title="Интервал просрочки", yaxis_title="Сумма долга (руб.)")
             st.plotly_chart(fig_aging, use_container_width=True)
-            
         with col_b:
             dynamics_data = pd.DataFrame({
                 'Период': ['Март', 'Апр', 'Май', 'Июн', 'Текущий срез'],
                 'Общий долг': [total_portfolio*0.9, total_portfolio*0.93, total_portfolio*0.96, total_portfolio*0.98, total_portfolio],
                 'Просроченный долг (ПДЗ)': [total_overdue*0.82, total_overdue*0.88, total_overdue*0.91, total_overdue*0.95, total_overdue]
             })
-            fig_dyn = px.line(
-                dynamics_data, 
-                x='Период', 
-                y=['Общий долг', 'Просроченный долг (ПДЗ)'], 
-                markers=True,
-                title="Тренд и темпы роста просроченного долга"
-            )
-            fig_dyn.update_layout(xaxis_title="Период анализа", yaxis_title="Сумма (руб.)")
+            fig_dyn = px.line(dynamics_data, x='Период', y=['Общий долг', 'Просроченный долг (ПДЗ)'], markers=True, title="Тренд и темпы роста просроченного долга")
             st.plotly_chart(fig_dyn, use_container_width=True)
             
     elif page == "3. Топ-5 дебиторов (Риски)":
         st.subheader("🚨 Страница 3: Топ-5 дебиторов с наибольшим объемом просрочки")
-        st.markdown("Контрагенты, формирующие наибольший риск невозврата и требующие первоочередного взыскания.")
-        
-        # Сортируем клиентов по размеру просроченного долга
         top_debtors = clients_df.sort_values(by="Просрочено", ascending=False).head(5)
         
-        fig_top = px.bar(
-            top_debtors,
-            x='Просрочено',
-            y='Клиент',
-            orientation='h',
-            text='Просрочено',
-            title="Топ-5 крупнейших должников по объему ПДЗ",
-            color='Просрочено',
-            color_continuous_scale='OrRd'
-        )
+        fig_top = px.bar(top_debtors, x='Просрочено', y='Клиент', orientation='h', text='Просрочено', title="Топ-5 крупнейших должников по объему ПДЗ", color='Просрочено', color_continuous_scale='OrRd')
         fig_top.update_traces(texttemplate='%{text:,.2f} ₽', textposition='outside')
         fig_top.update_layout(xaxis_title="Сумма просрочки (руб.)", yaxis_title="Контрагент", yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_top, use_container_width=True)
         
-        st.markdown("### Детализация по топ-5 дебиторам")
-        st.dataframe(
-            top_debtors[['№ п/п', 'Клиент', 'Общий долг', 'Просрочено', 'Макс. дней просрочки', 'Комментарий']],
-            column_config={
-                "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
-                "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
-                "Макс. дней просрочки": st.column_config.NumberColumn("Макс. дней просрочки", format="%d"),
-            },
-            use_container_width=True,
-            hide_index=True
-        )
+        st.dataframe(top_debtors[['№ п/п', 'Клиент', 'Общий долг', 'Просрочено', 'Макс. дней просрочки', 'Комментарий']], use_container_width=True, hide_index=True)
         
     elif page == "4. Детальный реестр и заказы":
         st.subheader("🌳 Страница 4: Иерархический реестр (Клиенты и заказы)")
-        st.markdown("Детальный разбор задолженности по каждому объекту расчетов (заказам).")
-        
         selected_client_filter = st.selectbox("Фильтр по контрагенту:", ["Все клиенты"] + list(clients_df['Клиент'].unique()))
         filtered_hierarchy = hierarchy if selected_client_filter == "Все клиенты" else [c for c in hierarchy if c['Клиент'] == selected_client_filter]
         
@@ -297,7 +268,6 @@ if target_file is not None:
                     'Не просрочено': o['Не просрочено'],
                     'Комментарий': o['Комментарий']
                 } for o in client['Заказы']]
-                
                 if orders_data:
                     st.dataframe(pd.DataFrame(orders_data), use_container_width=True, hide_index=True)
                 else:
@@ -305,49 +275,19 @@ if target_file is not None:
                     
     elif page == "5. Экспорт и отправка":
         st.subheader("⚙️ Страница 5: Экспорт отчета и рассылка")
-        st.markdown("Выгрузка готового аналитического свода в HTML-формат или отправка руководству по электронной почте.")
-        
         export_df = clients_df.fillna("-")
-        html_content = f"""
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Сводный финансовый отчет по дебиторской задолженности</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
-                h1 {{ color: #1F4E78; }}
-                table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 14px; }}
-                th, td {{ border: 1px solid #D9D9D9; padding: 8px 12px; text-align: left; }}
-                th {{ background-color: #1F4E78; color: white; }}
-                tr:nth-child(even) {{ background-color: #F9FAFB; }}
-            </style>
-        </head>
-        <body>
-            <h1>Сводный финансовый отчет по дебиторской задолженности</h1>
-            <p>Дата актуальности: Свежий срез из Google Drive | Валюта: RUB</p>
-            <h3>Свод по клиентам</h3>
-            {export_df.to_html(index=False, float_format=lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else str(x))}
-        </body>
-        </html>
-        """
+        html_content = f"<html><body><h1>Сводный отчет</h1>{export_df.to_html(index=False)}</body></html>"
         
         col_ex1, col_ex2 = st.columns(2)
         with col_ex1:
-            st.markdown("### 📥 Скачать HTML")
-            st.download_button(
-                label="🌐 Скачать сводный отчет (HTML)",
-                data=html_content.encode("utf-8"),
-                file_name="Финансовый_отчет_ПДЗ.html",
-                mime="text/html"
-            )
+            st.download_button("🌐 Скачать сводный отчет (HTML)", data=html_content.encode("utf-8"), file_name="report.html", mime="text/html")
         with col_ex2:
-            st.markdown("### 📧 Рассылка по Email")
             recipient_input = st.text_input("Email получателя", value="boss@company.ru")
             if st.button("📨 Отправить отчет руководству"):
                 success, message = send_report_via_email(html_content, recipient_input)
                 if success:
-                    st.success(f"✅ {message}")
+                    st.success(message)
                 else:
-                    st.error(f"❌ Ошибка: {message}")
+                    st.error(message)
 else:
     st.error(f"❌ {fetch_message}")
