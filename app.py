@@ -120,6 +120,7 @@ if target_file is not None:
     df_aging, hierarchy = load_hierarchy_data(target_file)
     
     clients_df = pd.DataFrame([{
+        '№ п/п': i + 1,
         'Клиент': c['Клиент'],
         'Общий долг': c['Общий долг'],
         'Просрочено': c['Просрочено'],
@@ -127,7 +128,7 @@ if target_file is not None:
         'Доля долга (%)': c['Доля долга (%)'],
         'Макс. дней просрочки': c['Дней просрочки'],
         'Комментарий': c['Комментарий']
-    } for c in hierarchy])
+    } for i, c in enumerate(hierarchy)])
     
     # Sidebar Filters
     st.sidebar.markdown("---")
@@ -177,7 +178,6 @@ if target_file is not None:
             st.plotly_chart(fig_aging, use_container_width=True)
             
         with c2:
-            # AR Dynamics simulation / trend chart based on portfolio structure
             dynamics_data = pd.DataFrame({
                 'Месяц': ['Март 2026', 'Апр 2026', 'Май 2026', 'Июн 2026', 'Июл 2026'],
                 'Общий долг': [9800000, 10200000, 10500000, 10900000, total_portfolio],
@@ -201,6 +201,7 @@ if target_file is not None:
         st.dataframe(
             clients_df,
             column_config={
+                "№ п/п": st.column_config.NumberColumn("№", format="%d"),
                 "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
                 "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
                 "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
@@ -249,7 +250,9 @@ if target_file is not None:
                     
     with tab4:
         st.subheader("Экспорт отчета (HTML)")
-        st.markdown("Вы можете выгрузить сводный отчет в интерактивном формате HTML.")
+        st.markdown("Вы можете выгрузить сводный отчет в интерактивном формате HTML (без пропусков NaN).")
+        
+        export_df = clients_df.fillna("-")
         
         html_content = f"""
         <html>
@@ -269,7 +272,7 @@ if target_file is not None:
             <h1>Сводный отчет по дебиторской задолженности</h1>
             <p>Дата актуальности: 27.07.2026 | Валюта: RUB</p>
             <h3>Свод по клиентам</h3>
-            {clients_df.to_html(index=False, float_format=lambda x: f"{x:,.2f}" if isinstance(x, float) else str(x))}
+            {export_df.to_html(index=False, float_format=lambda x: f"{x:,.2f}" if isinstance(x, (int, float)) else str(x))}
         </body>
         </html>
         """
