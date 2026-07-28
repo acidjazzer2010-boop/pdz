@@ -4,9 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from exporter import send_report_via_email
 
 # Page configuration
 st.set_page_config(
@@ -293,38 +291,15 @@ if target_file is not None:
             
         with col_exp2:
             st.markdown("### 📧 Отправить по электронной почте")
-            st.markdown("Настройте параметры SMTP-сервера для отправки отчета руководству.")
+            st.markdown("Отправка отчета с использованием безопасных секретов сервера Streamlit (`st.secrets`).")
             
-            with st.form("email_form"):
-                smtp_server = st.text_input("SMTP Сервер", value="smtp.yandex.ru")
-                smtp_port = st.number_input("SMTP Порт", value=465, step=1)
-                sender_email = st.text_input("Email отправителя", value="user@yandex.ru")
-                sender_password = st.text_input("Пароль приложения / Пароль", type="password")
-                recipient_email = st.text_input("Email получателя", value="boss@company.ru")
-                email_subject = st.text_input("Тема письма", value="Сводный отчет по дебиторской задолженности от 27.07.2026")
-                
-                submit_email = st.form_submit_button("📨 Отправить отчет по почте")
-                
-                if submit_email:
-                    try:
-                        msg = MIMEMultipart()
-                        msg['From'] = sender_email
-                        msg['To'] = recipient_email
-                        msg['Subject'] = email_subject
-                        
-                        msg.attach(MIMEText("Здравствуйте!\n\nВо вложении находится актуальный сводный отчет по управлению дебиторской задолженностью.\n\nС уважением,\nФинансовый отдел", 'plain'))
-                        
-                        html_attachment = MIMEText(html_content, 'html', 'utf-8')
-                        html_attachment.add_header('Content-Disposition', 'attachment', filename='debt_report.html')
-                        msg.attach(html_attachment)
-                        
-                        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-                        server.login(sender_email, sender_password)
-                        server.sendmail(sender_email, recipient_email, msg.as_string())
-                        server.quit()
-                        
-                        st.success("✅ Отчет успешно отправлен на указанный адрес электронной почты!")
-                    except Exception as e:
-                        st.error(f"❌ Ошибка отправки письма: {e}")
+            recipient_input = st.text_input("Email получателя", value="boss@company.ru")
+            
+            if st.button("📨 Отправить отчет по почте"):
+                success, message = send_report_via_email(html_content, recipient_input)
+                if success:
+                    st.success(f"✅ {message}")
+                else:
+                    st.error(f"❌ Ошибка: {message}")
 else:
     st.info("Пожалуйста, загрузите Excel-файл с отчетом через боковую панель слева, чтобы начать работу.")
