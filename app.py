@@ -4,6 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from io import BytesIO
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 # Page configuration
 st.set_page_config(
@@ -155,7 +158,7 @@ if target_file is not None:
         "📈 Аналитика и Динамика ДЗ", 
         "📋 Свод по клиентам", 
         "🌳 Иерархический реестр", 
-        "⚙️ Экспорт отчета"
+        "⚙️ Экспорт и Отправка"
     ])
     
     with tab1:
@@ -249,8 +252,7 @@ if target_file is not None:
                     st.info("Детальные заказы отсутствуют.")
                     
     with tab4:
-        st.subheader("Экспорт отчета (HTML)")
-        st.markdown("Вы можете выгрузить сводный отчет в интерактивном формате HTML (без пропусков NaN).")
+        st.subheader("⚙️ Панель экспорта и отправки отчета")
         
         export_df = clients_df.fillna("-")
         
@@ -277,11 +279,52 @@ if target_file is not None:
         </html>
         """
         
-        st.download_button(
-            label="🌐 Скачать сводный отчет в HTML",
-            data=html_content.encode("utf-8"),
-            file_name="Сводный_отчет_дебиторская_задолженность.html",
-            mime="text/html"
-        )
+        col_exp1, col_exp2 = st.columns(2)
+        
+        with col_exp1:
+            st.markdown("### 📥 Скачать HTML-отчет")
+            st.markdown("Сохранить готовый веб-отчет на устройство.")
+            st.download_button(
+                label="🌐 Скачать отчет в HTML",
+                data=html_content.encode("utf-8"),
+                file_name="Сводный_отчет_дебиторская_задолженность.html",
+                mime="text/html"
+            )
+            
+        with col_exp2:
+            st.markdown("### 📧 Отправить по электронной почте")
+            st.markdown("Настройте параметры SMTP-сервера для отправки отчета руководству.")
+            
+            with st.form("email_form"):
+                smtp_server = st.text_input("SMTP Сервер", value="smtp.yandex.ru")
+                smtp_port = st.number_input("SMTP Порт", value=465, step=1)
+                sender_email = st.text_input("Email отправителя", value="user@yandex.ru")
+                sender_password = st.text_input("Пароль приложения / Пароль", type="password")
+                recipient_email = st.text_input("Email получателя", value="boss@company.ru")
+                email_subject = st.text_input("Тема письма", value="Сводный отчет по дебиторской задолженности от 27.07.2026")
+                
+                submit_email = st.form_submit_button("📨 Отправить отчет по почте")
+                
+                if submit_email:
+                    try:
+                        msg = MIMEMultipart()
+                        msg['From'] = sender_email
+                        msg['To'] = recipient_email
+                        msg['Subject'] = email_subject
+                        
+                        msg.attach(MIMEText("Здравствуйте!\n\nВо вложении находится актуальный сводный отчет по управлению дебиторской задолженностью.\n\nС уважением,\nФинансовый отдел", 'plain'))
+                        
+                        html_attachment = MIMEText(html_content, 'html', 'utf-8')
+                        html_attachment.add_header('Content-Disposition', 'attachment', filename='debt_report.html')
+                        msg.attach(html_attachment)
+                        
+                        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+                        server.login(sender_email, sender_password)
+                        server.sendmail(sender_email, recipient_email, msg.as_string())
+                        server.quit()
+                        
+                        st.success("✅ Отчет успешно отправлен на указанный адрес электронной почты!")
+                    except Exception as e:
+                        st.error(f"❌ Ошибка отправки письма: {e}")
 else:
     st.info("Пожалуйста, загрузите Excel-файл с отчетом через боковую панель слева, чтобы начать работу.")
