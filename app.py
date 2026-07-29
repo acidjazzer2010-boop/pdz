@@ -40,14 +40,12 @@ if "authenticated" not in st.session_state:
     st.session_state.name = None
 
 def verify_credentials(username, password):
-    users_dict = st.secrets.get("users", {
-        "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
-        "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер ПДЗ"}
-    })
+    # Берем пользователей строго из секретов сервера. Если их там нет — пустой словарь.
+    users_dict = st.secrets.get("users", {})
     
     if username in users_dict:
-        if users_dict[username]["password"] == password:
-            return True, users_dict[username]["role"], users_dict[username]["name"]
+        if users_dict[username].get("password") == password:
+            return True, users_dict[username].get("role", "Сотрудник"), users_dict[username].get("name", username)
     return False, None, None
 
 if not st.session_state.authenticated:
