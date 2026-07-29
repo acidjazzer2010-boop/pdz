@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 from exporter import send_report_via_email
-from drive_sync import fetch_latest_report_from_nas as fetch_latest_report_from_gdrive
+from drive_sync import fetch_latest_report_from_nas as  fetch_latest_report_from_nas()
 
 # Page configuration
 st.set_page_config(
