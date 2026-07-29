@@ -7,7 +7,7 @@ from drive_sync import fetch_latest_report_from_gdrive
 
 # Page configuration
 st.set_page_config(
-    page_title="Корпоративный отчет: Управление дебиторской задолженностью",
+    page_title="Управление дебиторской задолженностью",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -82,7 +82,7 @@ if st.sidebar.button("🚪 Выйти из системы"):
     st.rerun()
 
 st.title("📈 Финансовый отчет: Управление дебиторской задолженностью")
-st.markdown("Отчет для контроля портфеля и рисков")
+
 
 @st.cache_data
 def load_hierarchy_data(file_bytes):
