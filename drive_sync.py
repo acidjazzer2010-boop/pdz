@@ -7,7 +7,7 @@ def fetch_latest_report_from_nas():
     Загружает отчет по прямой ссылке шаринга Synology NAS без требования логина/пароля.
     """
     cache_filename = "last_downloaded_report.xlsx"
-    sharing_url = "http://45.130.190.72:6783/sharing/i4LaNSCbE"
+    sharing_url = "http://45.130.190.72:6783/sharing/yj99RuupO"
     
     try:
         headers = {
