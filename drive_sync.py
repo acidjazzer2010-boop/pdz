@@ -5,43 +5,37 @@ import streamlit as st
 
 def fetch_latest_report_from_gdrive():
     """
-    Автоматически забирает файл из Google Drive по ID или полной ссылке,
-    с сохранением локального кэша (предыдущего файла) при сбое.
+    Загружает актуальный отчет с Synology NAS (http://45.130.190.72:6783/) 
+    с поддержкой парольного доступа и локального кэширования.
     """
     cache_filename = "last_downloaded_report.xlsx"
-    gdrive_input = st.secrets.get("GDRIVE_FILE_ID", "")
     
-    if not gdrive_input:
+    # Получаем параметры подключения к вашему NAS из st.secrets
+    nas_url = st.secrets.get("NAS_URL", "")
+    nas_user = st.secrets.get("NAS_USER", "")
+    nas_pass = st.secrets.get("NAS_PASSWORD", "")
+    
+    if not nas_url:
         if os.path.exists(cache_filename):
-            return open(cache_filename, "rb"), "⚠️ GDRIVE_FILE_ID не задан в secrets. Использован предыдущий кэш."
-        return None, "Не задан GDRIVE_FILE_ID в настройках st.secrets."
-
-    # Извлекаем ID из любой ссылки Google Drive или оставляем как есть, если это чистый ID
-    file_id = gdrive_input.strip()
-    if "drive.google.com" in file_id or "docs.google.com" in file_id:
-        if "/d/" in file_id:
-            try:
-                file_id = file_id.split("/d/")[1].split("/")[0]
-            except:
-                pass
+            return open(cache_filename, "rb"), "⚠️ NAS_URL не задан. Использован локальный кэш."
+        return None, "Не задан параметр NAS_URL в настройках st.secrets."
 
     try:
-        # Прямая ссылка на экспорт/скачивание файла Google Drive
-        download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        response = requests.get(download_url, timeout=10)
+        # Запрос к Synology NAS с авторизацией (если требуется)
+        auth = (nas_user, nas_pass) if nas_user and nas_pass else None
+        response = requests.get(nas_url, auth=auth, timeout=15)
         
-        # Проверяем, что файл скачался (размер больше 1 КБ и это не страница авторизации Google)
-        if response.status_code == 200 and len(response.content) > 1000 and b"<html>" not in response.content[:100]:
+        # Проверяем успешность загрузки (статус 200 и файл больше 1 КБ)
+        if response.status_code == 200 and len(response.content) > 1000:
             with open(cache_filename, "wb") as f:
                 f.write(response.content)
-            return io.BytesIO(response.content), "✅ Отчет успешно загружен из Google Drive!"
+            return io.BytesIO(response.content), "✅ Отчет успешно загружен с Synology NAS!"
         else:
-            # Если файл не отдал данные (например, закрыт доступ), берем кэш
             if os.path.exists(cache_filename):
-                return open(cache_filename, "rb"), "⚠️ Google Drive недоступен или нет прав 'Всем по ссылке'. Использован предыдущий отчет (кэш)."
-            return None, "Ошибка доступа к Google Drive. Проверьте права доступа файла ('Всем, у кого есть ссылка')."
+                return open(cache_filename, "rb"), "⚠️ NAS недоступен или неверный статус. Использован предыдущий отчет (кэш)."
+            return None, f"Ошибка загрузки с NAS: HTTP статус {response.status_code}"
             
     except Exception as e:
         if os.path.exists(cache_filename):
-            return open(cache_filename, "rb"), f"⚠️ Ошибка сети ({e}). Использован предыдущий отчет (кэш)."
-        return None, f"Ошибка загрузки: {e}"
+            return open(cache_filename, "rb"), f"⚠️ Ошибка сети с NAS ({e}). Использован кэш."
+        return None, f"Ошибка подключения к NAS: {e}"
