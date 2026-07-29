@@ -3,11 +3,11 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 from exporter import send_report_via_email
-from drive_sync import fetch_latest_report_from_nas as  fetch_latest_report_from_nas()
+from drive_sync import fetch_latest_report_from_nas
 
 # Page configuration
 st.set_page_config(
-    page_title="Управление дебиторской задолженностью",
+    page_title="Корпоративный отчет: Управление дебиторской задолженностью",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -40,16 +40,18 @@ if "authenticated" not in st.session_state:
     st.session_state.name = None
 
 def verify_credentials(username, password):
-    # Берем пользователей строго из секретов сервера. Если их там нет — пустой словарь.
-    users_dict = st.secrets.get("users", {})
+    users_dict = st.secrets.get("users", {
+        "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
+        "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер ПДЗ"}
+    })
     
     if username in users_dict:
-        if users_dict[username].get("password") == password:
-            return True, users_dict[username].get("role", "Сотрудник"), users_dict[username].get("name", username)
+        if users_dict[username]["password"] == password:
+            return True, users_dict[username]["role"], users_dict[username]["name"]
     return False, None, None
 
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет корпоративной системы</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -69,7 +71,7 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль")
     st.stop()
 
-# Боковая панель профиля (чистая, без лишних технических текстов)
+# Боковая панель профиля
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 if st.sidebar.button("🚪 Выйти из системы"):
@@ -80,7 +82,7 @@ if st.sidebar.button("🚪 Выйти из системы"):
     st.rerun()
 
 st.title("📈 Финансовый отчет: Управление дебиторской задолженностью")
-
+st.markdown("Серьезный постраничный аналитический комплекс для контроля портфеля и рисков.")
 
 @st.cache_data
 def load_hierarchy_data(file_bytes):
@@ -155,8 +157,8 @@ def load_hierarchy_data(file_bytes):
         
     return df_aging, hierarchy
 
-# Тихо загружаем файл из Google Drive (без лишних плашек)
-target_file, fetch_message = fetch_latest_report_from_gdrive()
+# Загружаем файл с Synology NAS
+target_file, fetch_message = fetch_latest_report_from_nas()
 
 if target_file is not None:
     df_aging, hierarchy = load_hierarchy_data(target_file)
@@ -186,7 +188,6 @@ if target_file is not None:
         "4. Детальный реестр и заказы"
     ]
     
-    # Доступ к экспорту и отправке только для роли Директор
     if st.session_state.role == "Директор":
         available_pages.append("5. Экспорт и отправка")
     
@@ -269,25 +270,19 @@ if target_file is not None:
     elif page == "5. Экспорт и отправка":
         st.subheader("⚙️ Страница 5: Экспорт отчета и рассылка")
         
-        # Функция для финансового форматирования чисел с разделителями тысяч (пробелы)
         def format_ru_number(val):
             if isinstance(val, (int, float)) and pd.notna(val):
                 return f"{val:,.2f}".replace(",", " ").replace(".", ",")
             return val
 
-        # Копируем датафрейм, исключая системный индекс Pandas
         export_df = clients_df.copy()
-        
-        # Форматируем числовые колонтитулы
         for col in export_df.columns:
             if export_df[col].dtype in ['float64', 'int64']:
                 export_df[col] = export_df[col].apply(format_ru_number)
         
-        # Заменяем все NaN, None, "nan" на пустые строки или прочерки для чистоты таблицы
         export_df = export_df.fillna("—")
         export_df = export_df.replace("nan", "—")
         
-        # HTML с кроссплатформенными системными шрифтами для macOS и Windows
         html_content = f"""
         <html>
         <head>
@@ -310,56 +305,7 @@ if target_file is not None:
         </head>
         <body>
             <h1>Сводный финансовый отчет по дебиторской задолженности</h1>
-            <p>Дата актуальности: Свежий срез из Google Drive | Валюта: RUB</p>
-            <h3>Свод по контрагентам</h3>
-            {export_df.to_html(index=False)}
-        </body>
-        </html>
-        """
-        
-        col_ex1, col_ex2 = st.columns(2)
-        with col_ex1:
-            st.markdown("### 📥 Скачать HTML")
-            st.download_button(
-                label="🌐 Скачать сводный отчет (HTML)",
-                data=html_content.encode("utf-8"),
-                file_name="Финансовый_отчет_ПДЗ.html",
-                mime="text/html"
-            )
-        with col_ex2:
-            st.markdown("### 📧 Рассылка по Email")
-            recipient_input = st.text_input("Email получателя", value="boss@company.ru")
-            if st.button("📨 Отправить отчет руководству"):
-                success, message = send_report_via_email(html_content, recipient_input)
-                if success:
-                    st.success(f"✅ {message}")
-                else:
-                    st.error(f"❌ Ошибка: {message}")
-        
-        # HTML с кроссплатформенными системными шрифтами для macOS и Windows
-        html_content = f"""
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>Сводный финансовый отчет по дебиторской задолженности</title>
-            <style>
-                body {{ 
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-                    margin: 20px; 
-                    color: #333; 
-                }}
-                h1 {{ color: #1F4E78; font-size: 22px; }}
-                p {{ color: #595959; font-size: 14px; }}
-                table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 13px; }}
-                th, td {{ border: 1px solid #D9D9D9; padding: 10px 12px; text-align: left; }}
-                th {{ background-color: #1F4E78; color: white; font-weight: bold; }}
-                tr:nth-child(even) {{ background-color: #F9FAFB; }}
-                td:nth-child(n+3) {{ text-align: right; }}
-            </style>
-        </head>
-        <body>
-            <h1>Сводный финансовый отчет по дебиторской задолженности</h1>
-            <p>Дата актуальности: Свежий срез из Google Drive | Валюта: RUB</p>
+            <p>Дата актуальности: Свежий срез с Synology NAS | Валюта: RUB</p>
             <h3>Свод по контрагентам</h3>
             {export_df.to_html(index=False)}
         </body>
@@ -385,4 +331,4 @@ if target_file is not None:
                 else:
                     st.error(f"❌ Ошибка: {message}")
 else:
-    st.error("❌ Не удалось получить файл отчета из Google Drive.")
+    st.error(f"❌ {fetch_message}")
