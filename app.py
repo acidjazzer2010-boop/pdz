@@ -3,13 +3,13 @@ import streamlit.components.v1 as components
 
 # Настройка страницы
 st.set_page_config(
-    page_title="Корпоративный портал",
+    page_title="Корпоративный портал KRAYVIN",
     page_icon="💼",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Стилизация интерфейса
+# Стилизация портала
 st.markdown("""
     <style>
     .main {
@@ -18,14 +18,13 @@ st.markdown("""
     h1, h2, h3 {
         color: #1F4E78;
     }
-    /* Скрываем стандартные отступы для iframe */
     div.stTabs [data-baseweb="tab-panel"] {
         padding-top: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- АВТОРИЗАЦИЯ И МНОГОПОЛЬЗОВАТЕЛЬСКИЙ ЛК ---
+# --- ЕДИНАЯ АВТОРИЗАЦИЯ НА ПОРТАЛЕ ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = None
@@ -44,7 +43,7 @@ def verify_credentials(username, password):
     return False, None, None
 
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Корпоративный портал</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Корпоративный портал KRAYVIN</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -64,7 +63,7 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль")
     st.stop()
 
-# --- БОКОВАЯ ПАНЕЛЬ ---
+# --- БОКОВАЯ ПАНЕЛЬ ПРОФИЛЯ ---
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 if st.sidebar.button("🚪 Выйти из системы"):
@@ -74,21 +73,19 @@ if st.sidebar.button("🚪 Выйти из системы"):
     st.session_state.name = None
     st.rerun()
 
-# --- ОСНОВНОЙ ИНТЕРФЕЙС С ВКЛАДКАМИ ---
-tab1, tab2 = st.tabs(["🧮 Финансовый калькулятор", "📈 Управление дебиторской задолженностью"])
+# --- ВКЛАДКИ СЕРВИСОВ (СВЕТЛАЯ ТЕМА) ---
+tab1, tab2 = st.tabs(["🧮 КРАЙВИН: Анализ денежных потоков", "📈 Управление дебиторской задолженностью"])
 
-# Вкладка 1: Финансовый калькулятор
 with tab1:
     components.iframe(
-        "https://kraivin-dashboard-cpmnvlfyd78y4kyfgryypb.streamlit.app/?embed=true",
-        height=900,
+        "https://kraivin-dashboard-cpmnvlfyd78y4kyfgryypb.streamlit.app/?embed=true&theme.base=light",
+        height=950,
         scrolling=True
     )
 
-# Вкладка 2: Управление дебиторской задолженностью
 with tab2:
     components.iframe(
-        "https://ompavtzjtpjclke8fqjmkp.streamlit.app/?embed=true",
-        height=900,
+        "https://ompavtzjtpjclke8fqjmkp.streamlit.app/?embed=true&theme.base=light",
+        height=950,
         scrolling=True
     )
