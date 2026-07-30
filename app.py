@@ -1,24 +1,33 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+import os
 from io import BytesIO
 
-# Импортируем ваши существующие модули для ПДЗ
+# Импортируем ваши внешние модули для экспорта и работы с NAS
 try:
     from drive_sync import fetch_latest_report_from_nas
-    from exporter import send_report_via_email
 except ImportError:
-    pass
+    fetch_latest_report_from_nas = None
+
+try:
+    from exporter import generate_html_report_bytes, send_report_to_email, send_report_via_email
+except ImportError:
+    generate_html_report_bytes = None
+    send_report_to_email = None
+    send_report_via_email = None
 
 # --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
-    page_title="Личный кабинет",
-    page_icon="💼",
+    page_title="КРАЙВИН - Корпоративный портал",
+    page_icon="🍷",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Принудительная стилизация под корпоративный светлый стиль
+# Корпоративная стилизация
 st.markdown("""
     <style>
     .main {
@@ -29,10 +38,10 @@ st.markdown("""
         padding: 15px;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        border-left: 4px solid #1F4E78;
+        border-left: 4px solid #642A38;
     }
     h1, h2, h3 {
-        color: #1F4E78;
+        color: #642A38;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -46,16 +55,16 @@ if "authenticated" not in st.session_state:
 
 def verify_credentials(username, password):
     users_dict = st.secrets.get("users", {
-        "admin": {"password": "password", "role": "Директор", "name": "Администратор"},
-        "manager": {"password": "password", "role": "Финансист", "name": "Менеджер"}
+        "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
+        "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер"}
     })
     if username in users_dict and users_dict[username]["password"] == password:
         return True, users_dict[username]["role"], users_dict[username]["name"]
     return False, None, None
 
-# Экран логина (выводится ровно 1 раз для всего приложения)
+# Экран входа (Ровно 1 раз для всего приложения)
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Корпоративный портал KRAYVIN</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -75,7 +84,11 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль")
     st.stop()
 
-# --- 3. БОКОВАЯ ПАНЕЛЬ ПРОФИЛЯ ---
+# --- 3. БОКОВАЯ ПАНЕЛЬ ПРОФИЛЯ И НАВИГАЦИЯ ---
+logo_path = "КРАЙВИН лого винный квадрат.png"
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, use_container_width=True)
+
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 if st.sidebar.button("🚪 Выйти из системы"):
@@ -87,49 +100,264 @@ if st.sidebar.button("🚪 Выйти из системы"):
 
 st.sidebar.markdown("---")
 
-# --- 4. ПЕРЕКЛЮЧЕНИЕ МОДУЛЕЙ СИСТЕМЫ ---
+# Переключатель сервисов
 active_module = st.sidebar.radio(
     "📌 Выберите сервис:",
-    ["🧮 Финансовый калькулятор", "📈 Управление дебиторской задолженностью"]
+    ["🧮 Анализ денежных потоков", "📈 Управление дебиторской задолженностью"]
 )
 
-# ==============================================================================
-# МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР
-# ==============================================================================
-if active_module == "🧮 Финансовый калькулятор":
-    st.title("🧮 КРАЙВИН: Анализ денежных потоков и рентабельности")
-    st.markdown("Калькулятор расчёта чистого денежного потока (NCF), рентабельности и финансовых показателей.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("📥 Входные данные (Выручка и Затраты)")
-        revenue = st.number_input("Выручка от реализации (руб.)", value=10000000.0, step=100000.0)
-        cogs = st.number_input("Себестоимость / Прямые расходы (руб.)", value=6000000.0, step=100000.0)
-        opex = st.number_input("Операционные расходы / ОПЕКС (руб.)", value=1500000.0, step=50000.0)
-        taxes = st.number_input("Налоги и сборы (руб.)", value=500000.0, step=2000.0)
-
-    with col2:
-        st.subheader("📊 Расчётные показатели")
-        gross_profit = revenue - cogs
-        net_profit = gross_profit - opex - taxes
-        ros = (net_profit / revenue * 100) if revenue > 0 else 0.0
-
-        st.metric("Маржинальная прибыль", f"{gross_profit:,.2f}".replace(",", " ") + " ₽")
-        st.metric("Чистая прибыль (NCF)", f"{net_profit:,.2f}".replace(",", " ") + " ₽")
-        st.metric("Рентабельность продаж (ROS)", f"{ros:.1f} %")
-
-    st.markdown("---")
-    st.subheader("📈 Структура денежного потока")
-    calc_df = pd.DataFrame({
-        "Категория": ["Себестоимость", "ОПЕКС", "Налоги", "Чистая прибыль"],
-        "Сумма": [cogs, opex, taxes, max(0.0, net_profit)]
-    })
-    fig_calc = px.pie(calc_df, values="Сумма", names="Категория", title="Распределение выручки", color_discrete_sequence=px.colors.qualitative.Set2)
-    st.plotly_chart(fig_calc, use_container_width=True)
-
+st.sidebar.markdown("---")
 
 # ==============================================================================
-# МОДУЛЬ 2: УПРАВЛЕНИЕ ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТЬЮ
+# МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР ДЕНЕЖНЫХ ПОТОКОВ
+# ==============================================================================
+if active_module == "🧮 Анализ денежных потоков":
+    st.title("КРАЙВИН: Анализ денежных потоков и рентабельности")
+    st.markdown("Интерактивная финансовая модель для сценарного анализа кассовых разрывов.")
+
+    # Слайдеры и ввод параметров калькулятора в боковой панели
+    st.sidebar.header("Параметры финансовой модели")
+
+    ru_months_full = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    col_m, col_y = st.sidebar.columns(2)
+    start_month_idx = col_m.selectbox("Месяц старта", range(12), format_func=lambda x: ru_months_full[x])
+    start_year = col_y.selectbox("Год старта", [2026, 2027])
+
+    margin_pct = st.sidebar.slider("Маржинальность (%)", min_value=10, max_value=50, value=20, step=1)
+    period = st.sidebar.selectbox("Горизонт планирования (мес)", [6, 12, 18, 24])
+
+    st.sidebar.subheader("Стартовый капитал и закупки")
+    initial_purchase = st.sidebar.number_input("Первоначальная закупка товара (руб)", value=5_000_000, step=500_000)
+    initial_cash_buffer = st.sidebar.number_input("Стартовый денежный буфер (на счете)", value=2_000_000, step=500_000)
+
+    st.sidebar.subheader("Динамика продаж")
+    aov = st.sidebar.number_input("Средняя сумма заказа (руб)", value=150_000, step=10_000)
+    start_orders = st.sidebar.number_input("Заказов в 1-й месяц (шт)", value=40, step=1)
+    orders_growth = st.sidebar.slider("Ежемесячный прирост заказов (%)", 0, 100, 15, step=1)
+    scale_factor = st.sidebar.slider("Коэффициент масштабирования продаж", 0.5, 3.0, 1.0, 0.1)
+
+    st.sidebar.subheader("Команда и расходы")
+    monthly_fot = st.sidebar.number_input("ФОТ в месяц (руб)", value=500_000, step=50_000)
+
+    st.sidebar.subheader("Работа с поставщиками")
+    prepayment_pct = st.sidebar.slider("Предоплата поставщикам (%)", 0, 100, 50, step=10)
+    delay_days = st.sidebar.slider("Отсрочка на остаток (дней)", 0, 90, 40, step=5)
+
+    st.sidebar.subheader("Факторинг")
+    factoring_share = st.sidebar.slider("Доля выручки в факторинге (%)", 0, 100, 50, step=10)
+    factoring_advance = st.sidebar.slider("Аванс от фактора (%)", 50, 100, 80, step=5)
+
+    st.sidebar.subheader("Условия с покупателями")
+    customer_delay_days = st.sidebar.slider("Отсрочка платежа покупателям (дней)", 0, 120, 70, step=5)
+
+    # --- РАСЧЕТНАЯ ЧАСТЬ (МАТЕМАТИКА) ---
+    ru_months_short = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+    x_labels = []
+    for i in range(period):
+        m_idx = (start_month_idx + i) % 12
+        y_offset = (start_month_idx + i) // 12
+        x_labels.append(f"{ru_months_short[m_idx]} {start_year + y_offset}")
+
+    orders = np.zeros(period)
+    rev = np.zeros(period)
+
+    for i in range(period):
+        if i == 0:
+            orders[i] = start_orders * scale_factor
+        else:
+            orders[i] = orders[i-1] * (1 + (orders_growth / 100))
+        rev[i] = orders[i] * aov
+
+    cogs_pct = 1 - (margin_pct / 100)
+    cogs_no_vat = rev * cogs_pct
+    cogs_vat = cogs_no_vat * 1.2
+
+    delay_months_suppliers = max(1, int(round(delay_days / 30))) if delay_days > 0 else 0
+    cogs_payments = np.zeros(period)
+
+    for i in range(period):
+        cogs_payments[i] += cogs_vat[i] * (prepayment_pct / 100)
+        if i + delay_months_suppliers < period:
+            cogs_payments[i + delay_months_suppliers] += cogs_vat[i] * ((100 - prepayment_pct) / 100)
+
+    initial_prep = initial_purchase * (prepayment_pct / 100)
+    initial_post = initial_purchase * ((100 - prepayment_pct) / 100)
+
+    cogs_payments[0] += initial_prep
+    if delay_months_suppliers < period:
+        cogs_payments[delay_months_suppliers] += initial_post
+
+    customer_delay_months = max(0, int(round(customer_delay_days / 30)))
+
+    inflows = np.zeros(period)
+    for i in range(period):
+        inflows[i] += rev[i] * 1.2 * (factoring_share / 100) * (factoring_advance / 100)
+        
+        target_month = i + customer_delay_months
+        if target_month < period:
+            inflows[target_month] += rev[i] * 1.2 * ((100 - factoring_share) / 100)
+            inflows[target_month] += rev[i] * 1.2 * (factoring_share / 100) * ((100 - factoring_advance) / 100)
+
+    base_other_opex = 150_000
+    opex = np.full(period, base_other_opex + monthly_fot)
+    for i in range(6, period):
+        opex[i] = (base_other_opex * 1.2) + monthly_fot
+
+    taxes_and_commissions = rev * 0.05
+
+    outflows = cogs_payments + opex + taxes_and_commissions
+    net_cf = inflows - outflows
+
+    cum_cf = np.cumsum(net_cf)
+    cash_balance = cum_cf + initial_cash_buffer
+
+    sum_purchases = float(sum(cogs_payments))
+    total_fot = float(sum(np.full(period, monthly_fot)))
+    total_taxes = float(sum(taxes_and_commissions))
+    total_other_opex = float(sum(np.full(period, base_other_opex)))
+
+    # --- KPI МЕТРИКИ ---
+    max_deficit = float(min(min(cum_cf), 0))
+    net_profit = float(sum(rev * (margin_pct / 100)) - sum(opex) - sum(taxes_and_commissions) - (initial_purchase * 0.15))
+    roi = (net_profit / sum(rev)) * 100 if sum(rev) > 0 else 0.0
+
+    def format_rub(val):
+        return f"{val:,.0f}".replace(",", " ") + " руб."
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(f"Выручка (за {period} мес)", format_rub(sum(rev)))
+    col2.metric("Макс. кассовый разрыв", format_rub(max_deficit))
+    col3.metric("Чистая прибыль", format_rub(net_profit))
+    col4.metric("Рентабельность по ЧП", f"{roi:.1f}%")
+
+    st.divider()
+
+    # --- ПАНЕЛЬ ЭКСПОРТА ---
+    if generate_html_report_bytes is not None:
+        st.subheader("📤 Экспорт отчета в HTML")
+
+        html_data = generate_html_report_bytes(
+            period=period,
+            start_date=f"{ru_months_full[start_month_idx]} {start_year}",
+            sum_rev=format_rub(sum(rev)),
+            max_deficit=format_rub(max_deficit),
+            net_profit=format_rub(net_profit),
+            roi=f"{roi:.1f}%",
+            initial_cash_buffer=format_rub(initial_cash_buffer),
+            initial_purchase=format_rub(initial_purchase),
+            x_labels=x_labels,
+            cash_balance=cash_balance,
+            inflows=inflows,
+            outflows=outflows,
+            net_cf=net_cf,
+            rev=rev,
+            opex=opex,
+            taxes_and_commissions=taxes_and_commissions,
+            cogs_payments=cogs_payments,
+            cum_cf=cum_cf,
+            factoring_share=factoring_share,
+            margin_pct=margin_pct,
+            sum_purchases=sum_purchases,
+            total_fot=total_fot,
+            total_taxes=total_taxes,
+            total_other_opex=total_other_opex
+        )
+
+        tab_ex1, tab_ex2 = st.tabs(["📥 Скачать HTML-отчет", "✉️ Отправить HTML на email"])
+
+        with tab_ex1:
+            st.download_button(
+                label="💾 Скачать файл отчета",
+                data=html_data,
+                file_name="Kraivin_Financial_Report.html",
+                mime="text/html",
+                use_container_width=True
+            )
+
+        with tab_ex2:
+            email_input = st.text_input("Email получателя", "partner@krayvin.ru")
+            if st.button("🚀 Отправить отчет на email"):
+                if send_report_to_email and send_report_to_email(email_input, html_data):
+                    st.success("Отчет успешно отправлен!")
+                else:
+                    st.error("Ошибка при отправке.")
+
+        st.divider()
+
+    # --- ВИЗУАЛИЗАЦИЯ НА ВКЛАДКАХ С ПОДПИСЯМИ ЗНАЧЕНИЙ ---
+    st.subheader("📊 Аналитические панели и графики")
+
+    tab1, tab2, tab3 = st.tabs(["💰 Ликвидность и Денежный поток", "📈 Рентабельность и Источники", "📉 Накопленный итог и Расходы"])
+
+    with tab1:
+        st.markdown("### Динамика ликвидности и остаток средств")
+        fig1 = go.Figure()
+        fig1.add_trace(go.Scatter(
+            x=x_labels, y=cash_balance, mode='lines+markers+text', name='Остаток ДС',
+            text=[f"{v:,.0f}".replace(",", " ") for v in cash_balance], textposition="top center",
+            line=dict(color='#642A38', width=3), fill='tozeroy', fillcolor='rgba(100, 42, 56, 0.1)'
+        ))
+        fig1.add_hline(y=0, line_dash="dash", line_color="red", annotation_text="Дефицит")
+        fig1.update_layout(xaxis_title="Месяц", yaxis_title="Рубли", hovermode="x unified")
+        st.plotly_chart(fig1, use_container_width=True)
+
+        st.markdown("### Структура месячного денежного потока")
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(x=x_labels, y=inflows, name='Поступления', marker_color='#E3C293', text=[f"{v:,.0f}" for v in inflows], textposition='auto'))
+        fig2.add_trace(go.Bar(x=x_labels, y=-outflows, name='Выплаты', marker_color='#642A38', text=[f"{v:,.0f}" for v in outflows], textposition='auto'))
+        fig2.add_trace(go.Scatter(x=x_labels, y=net_cf, name='Чистый поток', marker_color='#B88645', mode='lines+markers'))
+        fig2.update_layout(barmode='relative', xaxis_title="Месяц", yaxis_title="Рубли", hovermode="x unified")
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with tab2:
+        st.markdown("### Динамика маржинальности и операционной прибыли (EBITDA)")
+        fig3 = go.Figure()
+        ebitda_vals = rev - opex - taxes_and_commissions - (cogs_payments * 0.3)
+        fig3.add_trace(go.Bar(x=x_labels, y=ebitda_vals, name='EBITDA', marker_color='#642A38', text=[f"{v:,.0f}" for v in ebitda_vals], textposition='auto'))
+        fig3.add_trace(go.Scatter(x=x_labels, y=[margin_pct]*period, name='Маржинальность (%)', yaxis='y2', line=dict(color='#E3C293', width=3)))
+        fig3.update_layout(xaxis_title="Месяц", yaxis_title="EBITDA (руб)", yaxis2=dict(title="Маржа (%)", overlaying='y', side='right', range=[0, 50]))
+        st.plotly_chart(fig3, use_container_width=True)
+
+        st.markdown("### Структура притока денежных средств по источникам")
+        fig4 = go.Figure()
+        dir_inf = rev * 1.2 * ((100 - factoring_share) / 100)
+        fact_inf = rev * 1.2 * (factoring_share / 100)
+        fig4.add_trace(go.Bar(x=x_labels, y=dir_inf, name='Оплата от клиентов', marker_color='#642A38'))
+        fig4.add_trace(go.Bar(x=x_labels, y=fact_inf, name='Факторинг', marker_color='#E3C293'))
+        fig4.update_layout(barmode='stack', xaxis_title="Месяц", yaxis_title="Рубли", hovermode="x unified")
+        st.plotly_chart(fig4, use_container_width=True)
+
+    with tab3:
+        st.markdown("### Накопленный денежный поток")
+        fig5 = go.Figure()
+        total_cash = cum_cf + initial_cash_buffer
+        fig5.add_trace(go.Scatter(
+            x=x_labels, y=total_cash, mode='lines+markers+text', name='Накопленный ДС',
+            text=[f"{v:,.0f}" for v in total_cash], textposition="top center",
+            line=dict(color='#642A38', width=3), fill='tozeroy', fillcolor='rgba(227, 194, 147, 0.2)'
+        ))
+        fig5.add_hline(y=initial_cash_buffer, line_dash="dash", line_color="#B88645", annotation_text="Стартовый буфер")
+        fig5.add_hline(y=0, line_dash="dot", line_color="red", annotation_text="Нулевой баланс")
+        fig5.update_layout(xaxis_title="Месяц", yaxis_title="Рубли", hovermode="x unified")
+        st.plotly_chart(fig5, use_container_width=True)
+
+        st.markdown("### Структура совокупных расходов")
+        exp_labels = ['Операционные расходы', 'Налоги и сборы', 'ФОТ (Команда)', 'Закупки товара']
+        exp_vals = [total_other_opex, total_taxes, total_fot, sum_purchases]
+        tot_exp = sum(exp_vals) or 1
+        exp_pcts = [v / tot_exp * 100 for v in exp_vals]
+        
+        fig6 = go.Figure(data=[go.Bar(
+            y=exp_labels, x=exp_pcts, orientation='h',
+            text=[f"{p:.1f}%" for p in exp_pcts], textposition='auto',
+            marker_color=['#D0C2B8', '#B88645', '#E3C293', '#642A38']
+        )])
+        fig6.update_layout(xaxis_title="Доля в расходах (%)", yaxis=dict(autorange="reversed"), margin=dict(t=10, b=0, l=0, r=0))
+        st.plotly_chart(fig6, use_container_width=True)
+
+
+# ==============================================================================
+# МОДУЛЬ 2: УПРАВЛЕНИЕ ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТЬЮ (ПДЗ)
 # ==============================================================================
 elif active_module == "📈 Управление дебиторской задолженностью":
     st.title("📈 Управление дебиторской задолженностью")
@@ -178,7 +406,10 @@ elif active_module == "📈 Управление дебиторской задо
 
         return df_aging, hierarchy
 
-    target_file, fetch_message = fetch_latest_report_from_nas()
+    if fetch_latest_report_from_nas is not None:
+        target_file, fetch_message = fetch_latest_report_from_nas()
+    else:
+        target_file, fetch_message = None, "Модуль drive_sync не найден."
 
     if target_file is not None:
         df_aging, hierarchy = load_hierarchy_data(target_file)
@@ -299,10 +530,10 @@ elif active_module == "📈 Управление дебиторской задо
                 <title>Сводный финансовый отчет по дебиторской задолженности</title>
                 <style>
                     body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
-                    h1 {{ color: #1F4E78; font-size: 22px; }}
+                    h1 {{ color: #642A38; font-size: 22px; }}
                     table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 13px; }}
                     th, td {{ border: 1px solid #D9D9D9; padding: 10px 12px; text-align: left; }}
-                    th {{ background-color: #1F4E78; color: white; }}
+                    th {{ background-color: #642A38; color: white; }}
                     td:nth-child(n+3) {{ text-align: right; }}
                 </style>
             </head>
@@ -328,10 +559,13 @@ elif active_module == "📈 Управление дебиторской задо
                 st.markdown("### 📧 Рассылка по Email")
                 recipient_input = st.text_input("Email получателя", value="boss@company.ru")
                 if st.button("📨 Отправить отчет руководству"):
-                    success, message = send_report_via_email(html_content, recipient_input)
-                    if success:
-                        st.success(f"✅ {message}")
+                    if send_report_via_email:
+                        success, message = send_report_via_email(html_content, recipient_input)
+                        if success:
+                            st.success(f"✅ {message}")
+                        else:
+                            st.error(f"❌ Ошибка: {message}")
                     else:
-                        st.error(f"❌ Ошибка: {message}")
+                        st.error("Функция отправки почты не подключена.")
     else:
         st.error(f"❌ {fetch_message}")
