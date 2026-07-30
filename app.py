@@ -12,7 +12,7 @@ except ImportError:
 
 # --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
-    page_title="Корпоративный портал KRAYVIN",
+    page_title="Личный кабинет",
     page_icon="💼",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -46,8 +46,8 @@ if "authenticated" not in st.session_state:
 
 def verify_credentials(username, password):
     users_dict = st.secrets.get("users", {
-        "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
-        "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер"}
+        "admin": {"password": "password", "role": "Директор", "name": "Администратор"},
+        "manager": {"password": "password", "role": "Финансист", "name": "Менеджер"}
     })
     if username in users_dict and users_dict[username]["password"] == password:
         return True, users_dict[username]["role"], users_dict[username]["name"]
@@ -55,7 +55,7 @@ def verify_credentials(username, password):
 
 # Экран логина (выводится ровно 1 раз для всего приложения)
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Корпоративный портал KRAYVIN</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
