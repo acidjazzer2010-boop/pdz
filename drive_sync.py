@@ -9,7 +9,7 @@ def fetch_latest_report_from_nas():
     cache_filename = "last_downloaded_report.xlsx"
     
     # Исправлена строка с URL (убрано дублирование)
-    direct_url = "http://45.130.190.72:6783/ПДЗ.xlsx"
+    direct_url = "http://45.130.190.72:6783/reports/ПДЗ.xlsx"
     
     try:
         response = requests.get(direct_url, timeout=20)
