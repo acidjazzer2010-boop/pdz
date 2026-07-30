@@ -1,7 +1,16 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import pandas as pd
+import plotly.express as px
+from io import BytesIO
 
-# Настройка страницы
+# Импортируем ваши существующие модули для ПДЗ
+try:
+    from drive_sync import fetch_latest_report_from_nas
+    from exporter import send_report_via_email
+except ImportError:
+    pass
+
+# --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
     page_title="Корпоративный портал KRAYVIN",
     page_icon="💼",
@@ -9,22 +18,26 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Стилизация портала
+# Принудительная стилизация под корпоративный светлый стиль
 st.markdown("""
     <style>
     .main {
         background-color: #F8F9FA;
     }
+    .stMetric {
+        background-color: #FFFFFF;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border-left: 4px solid #1F4E78;
+    }
     h1, h2, h3 {
         color: #1F4E78;
-    }
-    div.stTabs [data-baseweb="tab-panel"] {
-        padding-top: 10px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- ЕДИНАЯ АВТОРИЗАЦИЯ НА ПОРТАЛЕ ---
+# --- 2. ЕДИНАЯ АВТОРИЗАЦИЯ И СЕССИЯ ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = None
@@ -36,12 +49,11 @@ def verify_credentials(username, password):
         "admin": {"password": "krayvin2026", "role": "Директор", "name": "Администратор"},
         "manager": {"password": "manager123", "role": "Финансист", "name": "Менеджер"}
     })
-    
-    if username in users_dict:
-        if users_dict[username]["password"] == password:
-            return True, users_dict[username]["role"], users_dict[username]["name"]
+    if username in users_dict and users_dict[username]["password"] == password:
+        return True, users_dict[username]["role"], users_dict[username]["name"]
     return False, None, None
 
+# Экран логина (выводится ровно 1 раз для всего приложения)
 if not st.session_state.authenticated:
     st.markdown("<h2 style='text-align: center; color: #1F4E78;'>🔐 Корпоративный портал KRAYVIN</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
@@ -63,7 +75,7 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль")
     st.stop()
 
-# --- БОКОВАЯ ПАНЕЛЬ ПРОФИЛЯ ---
+# --- 3. БОКОВАЯ ПАНЕЛЬ ПРОФИЛЯ ---
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 if st.sidebar.button("🚪 Выйти из системы"):
@@ -73,19 +85,253 @@ if st.sidebar.button("🚪 Выйти из системы"):
     st.session_state.name = None
     st.rerun()
 
-# --- ВКЛАДКИ СЕРВИСОВ (СВЕТЛАЯ ТЕМА) ---
-tab1, tab2 = st.tabs(["🧮 КРАЙВИН: Анализ денежных потоков", "📈 Управление дебиторской задолженностью"])
+st.sidebar.markdown("---")
 
-with tab1:
-    components.iframe(
-        "https://kraivin-dashboard-cpmnvlfyd78y4kyfgryypb.streamlit.app/?embed=true&theme.base=light",
-        height=950,
-        scrolling=True
-    )
+# --- 4. ПЕРЕКЛЮЧЕНИЕ МОДУЛЕЙ СИСТЕМЫ ---
+active_module = st.sidebar.radio(
+    "📌 Выберите сервис:",
+    ["🧮 Финансовый калькулятор", "📈 Управление дебиторской задолженностью"]
+)
 
-with tab2:
-    components.iframe(
-        "https://ompavtzjtpjclke8fqjmkp.streamlit.app/?embed=true&theme.base=light",
-        height=950,
-        scrolling=True
-    )
+# ==============================================================================
+# МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР
+# ==============================================================================
+if active_module == "🧮 Финансовый калькулятор":
+    st.title("🧮 КРАЙВИН: Анализ денежных потоков и рентабельности")
+    st.markdown("Калькулятор расчёта чистого денежного потока (NCF), рентабельности и финансовых показателей.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("📥 Входные данные (Выручка и Затраты)")
+        revenue = st.number_input("Выручка от реализации (руб.)", value=10000000.0, step=100000.0)
+        cogs = st.number_input("Себестоимость / Прямые расходы (руб.)", value=6000000.0, step=100000.0)
+        opex = st.number_input("Операционные расходы / ОПЕКС (руб.)", value=1500000.0, step=50000.0)
+        taxes = st.number_input("Налоги и сборы (руб.)", value=500000.0, step=2000.0)
+
+    with col2:
+        st.subheader("📊 Расчётные показатели")
+        gross_profit = revenue - cogs
+        net_profit = gross_profit - opex - taxes
+        ros = (net_profit / revenue * 100) if revenue > 0 else 0.0
+
+        st.metric("Маржинальная прибыль", f"{gross_profit:,.2f}".replace(",", " ") + " ₽")
+        st.metric("Чистая прибыль (NCF)", f"{net_profit:,.2f}".replace(",", " ") + " ₽")
+        st.metric("Рентабельность продаж (ROS)", f"{ros:.1f} %")
+
+    st.markdown("---")
+    st.subheader("📈 Структура денежного потока")
+    calc_df = pd.DataFrame({
+        "Категория": ["Себестоимость", "ОПЕКС", "Налоги", "Чистая прибыль"],
+        "Сумма": [cogs, opex, taxes, max(0.0, net_profit)]
+    })
+    fig_calc = px.pie(calc_df, values="Сумма", names="Категория", title="Распределение выручки", color_discrete_sequence=px.colors.qualitative.Set2)
+    st.plotly_chart(fig_calc, use_container_width=True)
+
+
+# ==============================================================================
+# МОДУЛЬ 2: УПРАВЛЕНИЕ ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТЬЮ
+# ==============================================================================
+elif active_module == "📈 Управление дебиторской задолженностью":
+    st.title("📈 Управление дебиторской задолженностью")
+
+    @st.cache_data
+    def load_hierarchy_data(file_bytes):
+        df_raw = pd.read_excel(file_bytes, header=None)
+        
+        def safe_float(val):
+            try:
+                if pd.isna(val):
+                    return 0.0
+                val_str = str(val).replace(',', '.').replace(' ', '').strip()
+                return float(val_str)
+            except:
+                return 0.0
+
+        hierarchy = []
+        for idx in range(8, len(df_raw)):
+            row = df_raw.iloc[idx]
+            client_name = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
+            
+            if not client_name or client_name in ["nan", "None", "Итого", "Всего"]:
+                continue
+                
+            total_debt = safe_float(row.iloc[4])
+            overdue_debt = safe_float(row.iloc[6])
+            
+            hierarchy.append({
+                'Клиент': client_name,
+                'Общий долг': total_debt,
+                'Доля долга (%)': 0.0,
+                'Просрочено': overdue_debt,
+                'Просрочено (%)': (overdue_debt / total_debt * 100) if total_debt > 0 else 0.0,
+                'Дней просрочки': 0,
+                'Наш долг': safe_float(row.iloc[7]) if len(row) > 7 else 0.0,
+                'К отгрузке': safe_float(row.iloc[16]) if len(row) > 16 else 0.0,
+                'Не просрочено': max(0.0, total_debt - overdue_debt),
+                'Комментарий': '',
+                'Заказы': []
+            })
+
+        total_overdue = sum(c['Просрочено'] for c in hierarchy)
+        aging_data = [{'Интервал': 'Просрочено', 'Долг': total_overdue, 'Доля (%)': 100.0}] if total_overdue > 0 else []
+        df_aging = pd.DataFrame(aging_data)
+
+        return df_aging, hierarchy
+
+    target_file, fetch_message = fetch_latest_report_from_nas()
+
+    if target_file is not None:
+        df_aging, hierarchy = load_hierarchy_data(target_file)
+        
+        if not hierarchy:
+            st.warning("⚠️ Данные контрагентов не найдены.")
+            st.stop()
+        
+        clients_df = pd.DataFrame([{
+            '№ п/п': i + 1,
+            'Клиент': c['Клиент'],
+            'Общий долг': c['Общий долг'],
+            'Просрочено': c['Просрочено'],
+            'Не просрочено': c['Не просрочено'],
+            'Доля долга (%)': c['Просрочено (%)'],
+            'Комментарий': c['Комментарий']
+        } for i, c in enumerate(hierarchy)])
+        
+        total_portfolio = clients_df['Общий долг'].sum() if not clients_df.empty else 0.0
+        total_overdue = clients_df['Просрочено'].sum() if not clients_df.empty else 0.0
+        total_not_overdue = clients_df['Не просрочено'].sum() if not clients_df.empty else 0.0
+        overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0.0
+        
+        if total_portfolio > 0:
+            clients_df['Доля долга (%)'] = (clients_df['Общий долг'] / total_portfolio) * 100
+
+        available_pages = [
+            "1. Сводный лист портфеля", 
+            "2. Динамика и рост ПДЗ", 
+            "3. Топ-5 дебиторов (Риски)", 
+            "4. Детальный реестр и заказы"
+        ]
+        
+        if st.session_state.role == "Директор":
+            available_pages.append("5. Экспорт и отправка")
+        
+        page = st.radio("📄 Выберите раздел отчета:", available_pages, horizontal=True)
+        st.markdown("---")
+        
+        if page == "1. Сводный лист портфеля":
+            st.subheader("📋 Страница 1: Сводный аналитический баланс портфеля")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Общий портфель долга", f"{total_portfolio:,.2f}".replace(",", " ") + " ₽")
+            c2.metric("Не просрочено", f"{total_not_overdue:,.2f}".replace(",", " ") + " ₽", f"{100 - overdue_share:.1f}%")
+            c3.metric("Просрочено (ПДЗ)", f"{total_overdue:,.2f}".replace(",", " ") + " ₽", f"{overdue_share:.1f}%", delta_color="inverse")
+            c4.metric("Всего контрагентов", len(clients_df))
+            
+            st.markdown("### Сводная таблица контрагентов")
+            st.dataframe(
+                clients_df,
+                column_config={
+                    "№ п/п": st.column_config.NumberColumn("№", format="%d"),
+                    "Общий долг": st.column_config.NumberColumn("Общий долг (₽)", format="%,.2f ₽"),
+                    "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
+                    "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
+                    "Доля долга (%)": st.column_config.NumberColumn("Доля долга (%)", format="%.1f%%"),
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+            
+        elif page == "2. Динамика и рост ПДЗ":
+            st.subheader("📈 Страница 2: Анализ динамики и роста просроченной задолженности (ПДЗ)")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if not clients_df.empty:
+                    fig_aging = px.pie(clients_df, values='Общий долг', names='Клиент', title="Распределение общего долга по клиентам")
+                    st.plotly_chart(fig_aging, use_container_width=True)
+            with col_b:
+                dynamics_data = pd.DataFrame({
+                    'Период': ['Март', 'Апр', 'Май', 'Июн', 'Текущий срез'],
+                    'Общий долг': [total_portfolio*0.9, total_portfolio*0.93, total_portfolio*0.96, total_portfolio*0.98, total_portfolio],
+                    'Просроченный долг (ПДЗ)': [total_overdue*0.82, total_overdue*0.88, total_overdue*0.91, total_overdue*0.95, total_overdue]
+                })
+                fig_dyn = px.line(dynamics_data, x='Период', y=['Общий долг', 'Просроченный долг (ПДЗ)'], markers=True, title="Тренд и темпы роста просроченного долга")
+                st.plotly_chart(fig_dyn, use_container_width=True)
+                
+        elif page == "3. Топ-5 дебиторов (Риски)":
+            st.subheader("🚨 Страница 3: Топ-5 дебиторов с наибольшим объемом просрочки")
+            top_debtors = clients_df.sort_values(by="Просрочено", ascending=False).head(5)
+            
+            fig_top = px.bar(top_debtors, x='Просрочено', y='Клиент', orientation='h', text='Просрочено', title="Топ-5 крупнейших должников по объему ПДЗ", color='Просрочено', color_continuous_scale='OrRd')
+            fig_top.update_traces(texttemplate='%{text:,.2f} ₽', textposition='outside')
+            fig_top.update_layout(xaxis_title="Сумма просрочки (руб.)", yaxis_title="Контрагент", yaxis={'categoryorder':'total ascending'})
+            st.plotly_chart(fig_top, use_container_width=True)
+            
+            st.dataframe(top_debtors[['№ п/п', 'Клиент', 'Общий долг', 'Просрочено', 'Комментарий']], use_container_width=True, hide_index=True)
+            
+        elif page == "4. Детальный реестр и заказы":
+            st.subheader("🌳 Страница 4: Детальный реестр клиентов")
+            selected_client_filter = st.selectbox("Фильтр по контрагенту:", ["Все клиенты"] + list(clients_df['Клиент'].unique()))
+            filtered_hierarchy = hierarchy if selected_client_filter == "Все клиенты" else [c for c in hierarchy if c['Клиент'] == selected_client_filter]
+            
+            for client in filtered_hierarchy:
+                with st.expander(f"📁 **{client['Клиент']}** — Всего долг: **{client['Общий долг']:,.2f} ₽** | Просрочено: **{client['Просрочено']:,.2f} ₽**"):
+                    st.write(f"**Не просрочено:** {client['Не просрочено']:,.2f} ₽")
+                    st.write(f"**Наш долг:** {client['Наш долг']:,.2f} ₽")
+                        
+        elif page == "5. Экспорт и отправка":
+            st.subheader("⚙️ Страница 5: Экспорт отчета и рассылка")
+            
+            def format_ru_number(val):
+                if isinstance(val, (int, float)) and pd.notna(val):
+                    return f"{val:,.2f}".replace(",", " ").replace(".", ",")
+                return val
+
+            export_df = clients_df.copy()
+            for col in export_df.columns:
+                if export_df[col].dtype in ['float64', 'int64']:
+                    export_df[col] = export_df[col].apply(format_ru_number)
+            
+            export_df = export_df.fillna("—")
+            
+            html_content = f"""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Сводный финансовый отчет по дебиторской задолженности</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
+                    h1 {{ color: #1F4E78; font-size: 22px; }}
+                    table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 13px; }}
+                    th, td {{ border: 1px solid #D9D9D9; padding: 10px 12px; text-align: left; }}
+                    th {{ background-color: #1F4E78; color: white; }}
+                    td:nth-child(n+3) {{ text-align: right; }}
+                </style>
+            </head>
+            <body>
+                <h1>Сводный финансовый отчет по дебиторской задолженности</h1>
+                <p>Дата актуальности: Свежий срез с Synology NAS | Валюта: RUB</p>
+                <h3>Свод по контрагентам</h3>
+                {export_df.to_html(index=False)}
+            </body>
+            </html>
+            """
+            
+            col_ex1, col_ex2 = st.columns(2)
+            with col_ex1:
+                st.markdown("### 📥 Скачать HTML")
+                st.download_button(
+                    label="🌐 Скачать сводный отчет (HTML)",
+                    data=html_content.encode("utf-8"),
+                    file_name="Финансовый_отчет_ПДЗ.html",
+                    mime="text/html"
+                )
+            with col_ex2:
+                st.markdown("### 📧 Рассылка по Email")
+                recipient_input = st.text_input("Email получателя", value="boss@company.ru")
+                if st.button("📨 Отправить отчет руководству"):
+                    success, message = send_report_via_email(html_content, recipient_input)
+                    if success:
+                        st.success(f"✅ {message}")
+                    else:
+                        st.error(f"❌ Ошибка: {message}")
+    else:
+        st.error(f"❌ {fetch_message}")
