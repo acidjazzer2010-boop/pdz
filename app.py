@@ -10,15 +10,29 @@ import hmac
 import hashlib
 from io import BytesIO
 
-# Попытка импорта библиотеки для безопасного хеширования паролей
-try:
-    from werkzeug.security import check_password_hash
-except ImportError:
-    # Запасной вариант безопасного сравнения, если werkzeug не установлен
-    def check_password_hash(stored_hash, password):
-        # Ожидается хэш sha256
-        computed_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-        return hmac.compare_digest(stored_hash, computed_hash)
+import hashlib
+import hmac
+
+def verify_hash(stored_hash_string, provided_password):
+    """
+    Безопасно сверяет введённый пароль с сохраненным хешем PBKDF2.
+    """
+    try:
+        parts = stored_hash_string.split('$')
+        if len(parts) != 3:
+            return False
+        
+        algo_info, salt_hex, key_hex = parts
+        salt = bytes.fromhex(salt_hex)
+        stored_key = bytes.fromhex(key_hex)
+        
+       computed_key = hashlib.pbkdf2_hmac('sha256', provided_password.encode('utf-8'), salt, 100000)
+        
+      
+        return hmac.compare_digest(stored_key, computed_key)
+    except Exception:
+        return False
+        
 
 # --- ИМПОРТ ВНЕШНИХ МОДУЛЕЙ ---
 try:
