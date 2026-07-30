@@ -313,6 +313,55 @@ if active_module == "🧮 Анализ денежных потоков":
         fig5.add_trace(go.Scatter(x=x_labels, y=cum_cf + initial_cash_buffer, mode='lines+markers', name='Накопленный ДС', line=dict(color='#642A38', width=3)))
         st.plotly_chart(fig5, use_container_width=True)
 
+    # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 1) ---
+    st.divider()
+    st.subheader("📤 Экспорт финансовой модели")
+    exp_col1, exp_col2 = st.columns(2)
+    
+    with exp_col1:
+        cf_df = pd.DataFrame({
+            "Месяц": x_labels,
+            "Выручка": rev,
+            "Поступления": inflows,
+            "Выплаты": outflows,
+            "Чистый ДП": net_cf,
+            "Остаток ДС": cash_balance
+        })
+        html_cf_report = f"""
+        <html>
+        <body>
+            <h2>Отчет по денежным потокам (KRAYVIN)</h2>
+            <p><b>Горизонт:</b> {period} мес. | <b>Выручка:</b> {format_rub(sum(rev))} | <b>ЧП:</b> {format_rub(net_profit)}</p>
+            {cf_df.to_html(index=False, border=1)}
+        </body>
+        </html>
+        """
+        st.download_button(
+            label="📥 Скачать финансовую модель (HTML)",
+            data=html_cf_report,
+            file_name=f"cashflow_model_{datetime.datetime.now().strftime('%Y%m%d')}.html",
+            mime="text/html",
+            use_container_width=True,
+            key="dl_cf_html"
+        )
+
+    with exp_col2:
+        target_email_input = st.text_input("Email для отправки модели:", value=st.secrets.get("ALERT_EMAIL", "e.hasanov@kraivin.ru"), key="email_cf")
+        if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_cf_email"):
+            if send_report_via_email:
+                ok, msg = send_report_via_email(
+                    html_content=html_cf_report,
+                    recipient_email=target_email_input,
+                    subject="📊 Финансовая модель денежных потоков KRAYVIN",
+                    as_attachment=True
+                )
+                if ok:
+                    st.success("✅ Финансовый отчет успешно отправлен!")
+                else:
+                    st.error(f"❌ Ошибка отправки: {msg}")
+            else:
+                st.warning("Модуль exporter недоступен.")
+
 
 # ==============================================================================
 # МОДУЛЬ 2: УПРАВЛЕНИЕ ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТЬЮ
@@ -369,5 +418,48 @@ elif active_module == "📈 Управление дебиторской задо
             c3.metric("Контрагентов", len(clients_df))
             
             st.dataframe(clients_df[['Клиент', 'Общий долг', 'Просрочено', 'Не просрочено']], use_container_width=True)
+
+            # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 2) ---
+            st.divider()
+            st.subheader("📤 Экспорт отчета по ПДЗ")
+            exp_col1, exp_col2 = st.columns(2)
+
+            html_pdz_report = f"""
+            <html>
+            <body>
+                <h2>Сводный отчет по дебиторской задолженности</h2>
+                <p><b>Дата генерации:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+                <p><b>Общий портфель:</b> {total_portfolio:,.2f} ₽ | <b>ПДЗ:</b> {total_overdue:,.2f} ₽</p>
+                {clients_df[['Клиент', 'Общий долг', 'Просрочено', 'Не просрочено', 'Просрочено (%)']].to_html(index=False, border=1)}
+            </body>
+            </html>
+            """
+
+            with exp_col1:
+                st.download_button(
+                    label="📥 Скачать отчет ПДЗ (HTML)",
+                    data=html_pdz_report,
+                    file_name=f"pdz_report_{datetime.datetime.now().strftime('%Y%m%d')}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="dl_pdz_html"
+                )
+
+            with exp_col2:
+                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", "e.hasanov@kraivin.ru"), key="email_pdz")
+                if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_pdz_email"):
+                    if send_report_via_email:
+                        ok, msg = send_report_via_email(
+                            html_content=html_pdz_report,
+                            recipient_email=target_email_pdz,
+                            subject="📈 Сводный отчет по дебиторской задолженности KRAYVIN",
+                            as_attachment=True
+                        )
+                        if ok:
+                            st.success("✅ Отчет по ПДЗ успешно отправлен!")
+                        else:
+                            st.error(f"❌ Ошибка отправки: {msg}")
+                    else:
+                        st.warning("Модуль exporter недоступен.")
     else:
         st.error(f"❌ {fetch_message}")
