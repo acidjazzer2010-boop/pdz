@@ -90,12 +90,14 @@ def load_hierarchy_data(file_bytes):
     
     aging_data = []
     for idx in range(9, 16):
+        if idx >= len(df_raw):
+            break
         r = df_raw.iloc[idx]
         if pd.notna(r.iloc[1]) or pd.notna(r.iloc[6]):
             interval = r.iloc[1] if pd.notna(r.iloc[1]) else r.iloc[0]
-            if interval != "Наименование интервала":
+            if str(interval).strip() != "Наименование интервала":
                 aging_data.append({
-                    'Интервал': interval,
+                    'Интервал': str(interval).strip(),
                     'Долг': float(r.iloc[6]) if pd.notna(r.iloc[6]) else 0.0,
                     'Доля (%)': float(r.iloc[7]) if pd.notna(r.iloc[7]) else 0.0
                 })
@@ -161,7 +163,17 @@ def load_hierarchy_data(file_bytes):
 target_file, fetch_message = fetch_latest_report_from_nas()
 
 if target_file is not None:
+    st.info(fetch_message)
     df_aging, hierarchy = load_hierarchy_data(target_file)
+    
+    # Защитная проверка: если данные не распарсились
+    if not hierarchy:
+        st.warning("⚠️ Файл загружен, но данные контрагентов не найдены. Проверьте структуру строк в файле 'ПДЗ.xlsx'.")
+        # Вывод первых строк для отладки структуры
+        df_debug = pd.read_excel(target_file, header=None)
+        with st.expander("🔍 Посмотреть сырые данные из Excel"):
+            st.dataframe(df_debug.head(30))
+        st.stop()
     
     clients_df = pd.DataFrame([{
         '№ п/п': i + 1,
@@ -174,10 +186,10 @@ if target_file is not None:
         'Комментарий': c['Комментарий']
     } for i, c in enumerate(hierarchy)])
     
-    total_portfolio = clients_df['Общий долг'].sum()
-    total_overdue = clients_df['Просрочено'].sum()
-    total_not_overdue = clients_df['Не просрочено'].sum()
-    overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0
+    total_portfolio = clients_df['Общий долг'].sum() if not clients_df.empty else 0.0
+    total_overdue = clients_df['Просрочено'].sum() if not clients_df.empty else 0.0
+    total_not_overdue = clients_df['Не просрочено'].sum() if not clients_df.empty else 0.0
+    overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0.0
     
     st.markdown("---")
     
@@ -221,9 +233,12 @@ if target_file is not None:
         st.subheader("📈 Страница 2: Анализ динамики и роста просроченной задолженности (ПДЗ)")
         col_a, col_b = st.columns(2)
         with col_a:
-            fig_aging = px.bar(df_aging, x='Интервал', y='Долг', text='Доля (%)', title="Структура задолженности по интервалам просрочки", color='Долг', color_continuous_scale='Reds')
-            fig_aging.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            st.plotly_chart(fig_aging, use_container_width=True)
+            if not df_aging.empty:
+                fig_aging = px.bar(df_aging, x='Интервал', y='Долг', text='Доля (%)', title="Структура задолженности по интервалам просрочки", color='Долг', color_continuous_scale='Reds')
+                fig_aging.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                st.plotly_chart(fig_aging, use_container_width=True)
+            else:
+                st.info("Данные интервалов просрочки отсутствуют.")
         with col_b:
             dynamics_data = pd.DataFrame({
                 'Период': ['Март', 'Апр', 'Май', 'Июн', 'Текущий срез'],
