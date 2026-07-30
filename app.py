@@ -88,86 +88,45 @@ st.markdown("Серьезный постраничный аналитическ�
 def load_hierarchy_data(file_bytes):
     df_raw = pd.read_excel(file_bytes, header=None)
     
-    # 1. Парсинг интервалов просрочки
-    aging_data = []
-    for idx in range(0, min(20, len(df_raw))):
-        r = df_raw.iloc[idx]
-        if pd.notna(r.iloc[1]) or pd.notna(r.iloc[6]):
-            interval = r.iloc[1] if pd.notna(r.iloc[1]) else r.iloc[0]
-            if str(interval).strip() not in ["Наименование интервала", "nan", "None", ""]:
-                aging_data.append({
-                    'Интервал': str(interval).strip(),
-                    'Долг': float(r.iloc[6]) if pd.notna(r.iloc[6]) and str(r.iloc[6]).replace('.','',1).isdigit() else 0.0,
-                    'Доля (%)': float(r.iloc[7]) if pd.notna(r.iloc[7]) and str(r.iloc[7]).replace('.','',1).isdigit() else 0.0
-                })
-    df_aging = pd.DataFrame(aging_data)
-    
-    hierarchy = []
-    current_client_data = None
-    
     def safe_float(val):
         try:
+            if pd.isna(val):
+                return 0.0
             val_str = str(val).replace(',', '.').replace(' ', '').strip()
             return float(val_str)
         except:
             return 0.0
 
-    # 2. Динамический поиск начала таблицы контрагентов
-    start_row = 0
-    for idx, row in df_raw.iterrows():
-        row_str = " ".join([str(v) for v in row.values])
-        if "Контрагент" in row_str or "Клиент" in row_str or "Партнер" in row_str:
-            start_row = idx + 1
-            break
+    hierarchy = []
     
-    if start_row == 0:
-        start_row = 15  # Резервный старт, если заголовок не найден
-    
-    # 3. Разбор клиентов и связанных заказов
-    for idx in range(start_row, len(df_raw)):
+    for idx in range(8, len(df_raw)):
         row = df_raw.iloc[idx]
-        col_0 = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
-        col_2 = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ""
+        client_name = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
         
-        # Завершение при встрече блока "Итого"
-        if col_2 == "Итого" or "Итого" in [str(x) for x in row.values[:5]]:
-            break
+        if not client_name or client_name in ["nan", "None", "Итого", "Всего"]:
+            continue
             
-        # Определяем, является ли строка клиентом (номер/число в первой колонке)
-        is_client_row = col_0.replace('.', '').isdigit() and len(col_0) > 0
+        total_debt = safe_float(row.iloc[4])
+        overdue_debt = safe_float(row.iloc[6])
         
-        if is_client_row and not col_2.startswith('Заказ'):
-            if current_client_data:
-                hierarchy.append(current_client_data)
-                
-            current_client_data = {
-                'Клиент': col_2,
-                'Общий долг': safe_float(row.iloc[9]),
-                'Доля долга (%)': safe_float(row.iloc[11]),
-                'Просрочено': safe_float(row.iloc[13]),
-                'Просрочено (%)': safe_float(row.iloc[14]),
-                'Дней просрочки': safe_float(row.iloc[15]),
-                'Наш долг': safe_float(row.iloc[16]) if len(row) > 16 else 0.0,
-                'К отгрузке': safe_float(row.iloc[17]) if len(row) > 17 else 0.0,
-                'Не просрочено': safe_float(row.iloc[18]) if len(row) > 18 else 0.0,
-                'Комментарий': str(row.iloc[19]).strip() if len(row) > 19 and pd.notna(row.iloc[19]) else '',
-                'Заказы': []
-            }
-        elif current_client_data is not None and col_2:
-            current_client_data['Заказы'].append({
-                'Объект расчетов': col_2,
-                'Общий долг': safe_float(row.iloc[9]),
-                'Просрочено': safe_float(row.iloc[13]),
-                'Дней просрочки': safe_float(row.iloc[15]),
-                'Наш долг': safe_float(row.iloc[16]) if len(row) > 16 else 0.0,
-                'К отгрузке': safe_float(row.iloc[17]) if len(row) > 17 else 0.0,
-                'Не просрочено': safe_float(row.iloc[18]) if len(row) > 18 else 0.0,
-                'Комментарий': str(row.iloc[19]).strip() if len(row) > 19 and pd.notna(row.iloc[19]) else ''
-            })
+        hierarchy.append({
+            'Клиент': client_name,
+            'Общий долг': total_debt,
+            'Доля долга (%)': 0.0,
+            'Просрочено': overdue_debt,
+            'Просрочено (%)': (overdue_debt / total_debt * 100) if total_debt > 0 else 0.0,
+            'Дней просрочки': 0,
+            'Наш долг': safe_float(row.iloc[7]) if len(row) > 7 else 0.0,
+            'К отгрузке': safe_float(row.iloc[16]) if len(row) > 16 else 0.0,
+            'Не просрочено': max(0.0, total_debt - overdue_debt),
+            'Комментарий': '',
+            'Заказы': []
+        })
 
-    if current_client_data:
-        hierarchy.append(current_client_data)
-        
+    total_overdue = sum(c['Просрочено'] for c in hierarchy)
+    aging_data = [{'Интервал': 'Просрочено', 'Долг': total_overdue, 'Доля (%)': 100.0}] if total_overdue > 0 else []
+    df_aging = pd.DataFrame(aging_data)
+
     return df_aging, hierarchy
 
 # Загружаем файл с Synology NAS
@@ -177,12 +136,8 @@ if target_file is not None:
     st.info(fetch_message)
     df_aging, hierarchy = load_hierarchy_data(target_file)
     
-    # Защитная проверка
     if not hierarchy:
-        st.warning("⚠️ Файл загружен, но данные контрагентов не найдены. Проверьте структуру строк в файле 'ПДЗ.xlsx'.")
-        df_debug = pd.read_excel(target_file, header=None)
-        with st.expander("🔍 Посмотреть сырые данные из Excel"):
-            st.dataframe(df_debug.head(30))
+        st.warning("⚠️ Данные контрагентов не найдены.")
         st.stop()
     
     clients_df = pd.DataFrame([{
@@ -190,9 +145,8 @@ if target_file is not None:
         'Клиент': c['Клиент'],
         'Общий долг': c['Общий долг'],
         'Просрочено': c['Просрочено'],
-        'Не просрочено': c['Общий долг'] - c['Просрочено'],
-        'Доля долга (%)': c['Доля долга (%)'],
-        'Макс. дней просрочки': c['Дней просрочки'],
+        'Не просрочено': c['Не просрочено'],
+        'Доля долга (%)': c['Просрочено (%)'],
         'Комментарий': c['Комментарий']
     } for i, c in enumerate(hierarchy)])
     
@@ -201,6 +155,10 @@ if target_file is not None:
     total_not_overdue = clients_df['Не просрочено'].sum() if not clients_df.empty else 0.0
     overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0.0
     
+    # Вычисление доли каждого клиента в общем портфеле
+    if total_portfolio > 0:
+        clients_df['Доля долга (%)'] = (clients_df['Общий долг'] / total_portfolio) * 100
+
     st.markdown("---")
     
     available_pages = [
@@ -233,7 +191,6 @@ if target_file is not None:
                 "Просрочено": st.column_config.NumberColumn("Просрочено (₽)", format="%,.2f ₽"),
                 "Не просрочено": st.column_config.NumberColumn("Не просрочено (₽)", format="%,.2f ₽"),
                 "Доля долга (%)": st.column_config.NumberColumn("Доля долга (%)", format="%.1f%%"),
-                "Макс. дней просрочки": st.column_config.NumberColumn("Макс. дней просрочки", format="%d"),
             },
             use_container_width=True,
             hide_index=True
@@ -243,12 +200,11 @@ if target_file is not None:
         st.subheader("📈 Страница 2: Анализ динамики и роста просроченной задолженности (ПДЗ)")
         col_a, col_b = st.columns(2)
         with col_a:
-            if not df_aging.empty:
-                fig_aging = px.bar(df_aging, x='Интервал', y='Долг', text='Доля (%)', title="Структура задолженности по интервалам просрочки", color='Долг', color_continuous_scale='Reds')
-                fig_aging.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            if not clients_df.empty:
+                fig_aging = px.pie(clients_df, values='Общий долг', names='Клиент', title="Распределение общего долга по клиентам")
                 st.plotly_chart(fig_aging, use_container_width=True)
             else:
-                st.info("Данные интервалов просрочки отсутствуют.")
+                st.info("Данные отсутствуют.")
         with col_b:
             dynamics_data = pd.DataFrame({
                 'Период': ['Март', 'Апр', 'Май', 'Июн', 'Текущий срез'],
@@ -267,30 +223,17 @@ if target_file is not None:
         fig_top.update_layout(xaxis_title="Сумма просрочки (руб.)", yaxis_title="Контрагент", yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_top, use_container_width=True)
         
-        st.dataframe(top_debtors[['№ п/п', 'Клиент', 'Общий долг', 'Просрочено', 'Макс. дней просрочки', 'Комментарий']], use_container_width=True, hide_index=True)
+        st.dataframe(top_debtors[['№ п/п', 'Клиент', 'Общий долг', 'Просрочено', 'Комментарий']], use_container_width=True, hide_index=True)
         
     elif page == "4. Детальный реестр и заказы":
-        st.subheader("🌳 Страница 4: Иерархический реестр (Клиенты и заказы)")
+        st.subheader("🌳 Страница 4: Детальный реестр клиентов")
         selected_client_filter = st.selectbox("Фильтр по контрагенту:", ["Все клиенты"] + list(clients_df['Клиент'].unique()))
         filtered_hierarchy = hierarchy if selected_client_filter == "Все клиенты" else [c for c in hierarchy if c['Клиент'] == selected_client_filter]
         
         for client in filtered_hierarchy:
             with st.expander(f"📁 **{client['Клиент']}** — Всего долг: **{client['Общий долг']:,.2f} ₽** | Просрочено: **{client['Просрочено']:,.2f} ₽**"):
-                st.markdown(f"**Комментарий отдела:** {client['Комментарий'] if client['Комментарий'] else 'Нет комментариев'}")
-                orders_data = [{
-                    'Объект расчетов': o['Объект расчетов'],
-                    'Общий долг': o['Общий долг'],
-                    'Просрочено': o['Просрочено'],
-                    'Дней просрочки': o['Дней просрочки'],
-                    'Наш долг': o['Наш долг'],
-                    'К отгрузке': o['К отгрузке'],
-                    'Не просрочено': o['Не просрочено'],
-                    'Комментарий': o['Комментарий']
-                } for o in client['Заказы']]
-                if orders_data:
-                    st.dataframe(pd.DataFrame(orders_data), use_container_width=True, hide_index=True)
-                else:
-                    st.info("Детальные заказы отсутствуют.")
+                st.write(f"**Не просрочено:** {client['Не просрочено']:,.2f} ₽")
+                st.write(f"**Наш долг:** {client['Наш долг']:,.2f} ₽")
                     
     elif page == "5. Экспорт и отправка":
         st.subheader("⚙️ Страница 5: Экспорт отчета и рассылка")
@@ -306,7 +249,6 @@ if target_file is not None:
                 export_df[col] = export_df[col].apply(format_ru_number)
         
         export_df = export_df.fillna("—")
-        export_df = export_df.replace("nan", "—")
         
         html_content = f"""
         <html>
@@ -314,17 +256,11 @@ if target_file is not None:
             <meta charset="utf-8">
             <title>Сводный финансовый отчет по дебиторской задолженности</title>
             <style>
-                body {{ 
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-                    margin: 20px; 
-                    color: #333; 
-                }}
+                body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
                 h1 {{ color: #1F4E78; font-size: 22px; }}
-                p {{ color: #595959; font-size: 14px; }}
                 table {{ border-collapse: collapse; width: 100%; margin-top: 20px; font-size: 13px; }}
                 th, td {{ border: 1px solid #D9D9D9; padding: 10px 12px; text-align: left; }}
-                th {{ background-color: #1F4E78; color: white; font-weight: bold; }}
-                tr:nth-child(even) {{ background-color: #F9FAFB; }}
+                th {{ background-color: #1F4E78; color: white; }}
                 td:nth-child(n+3) {{ text-align: right; }}
             </style>
         </head>
