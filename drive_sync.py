@@ -6,43 +6,53 @@ import streamlit as st
 def fetch_latest_report_from_nas():
     """
     Автоматически загружает свежий отчет с Synology NAS.
-    Ссылка и параметры забираются из st.secrets.
+    Ссылка забирается из st.secrets["nas"]["url"].
     """
     cache_filename = "last_downloaded_report.xlsx"
     
-    # Забираем URL из secrets
+    # 1. Чтение URL из секретов
     try:
         direct_url = st.secrets["nas"]["url"]
     except Exception:
         return None, "❌ Ошибка: В st.secrets не найдена секция [nas] или ключ 'url'."
 
     try:
-        # Выполняем автозагрузку с таймаутом
-        response = requests.get(direct_url, timeout=20, allow_redirects=True)
+        # Передаем стандартный User-Agent, чтобы NAS не блокировал запрос
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
         
-        # Проверяем, что запрос успешен И содержимое является файлом XLSX (начинается с PK)
+        response = requests.get(direct_url, headers=headers, timeout=20, allow_redirects=True)
+        
+        # 2. Проверка бинарной сигнатуры XLSX (любой zip/xlsx начинается с b'PK')
         if response.status_code == 200 and response.content.startswith(b'PK'):
-            # Обновляем локальный кеш
             with open(cache_filename, "wb") as f:
                 f.write(response.content)
             return io.BytesIO(response.content), "✅ Отчет успешно автоматически загружен с Synology NAS!"
         
-        # Если NAS вернул 404, 403 или HTML-страницу входа вместо файла
+        # 3. Если NAS вернул HTML/текст вместо бинарного файла
         else:
+            # Получаем превью ответа для быстрой диагностики
+            preview = response.text[:200].replace("\n", " ").strip()
+            
+            # Попытка отдачи из локального кэша
             if os.path.exists(cache_filename):
                 with open(cache_filename, "rb") as f:
                     content = f.read()
                 if content.startswith(b'PK'):
-                    return io.BytesIO(content), f"⚠️ NAS вернул код {response.status_code} или HTML. Использована последняя успешная копия из кеша."
+                    return (
+                        io.BytesIO(content), 
+                        f"⚠️ NAS вернул HTTP {response.status_code} (не Excel). Использован кэш.\nОтвет NAS: {preview}"
+                    )
             
-            return None, f"❌ Ошибка загрузки с NAS (HTTP {response.status_code}). Сервер отдаёт не Excel-файл."
+            return None, f"❌ NAS вернул HTTP {response.status_code}, но это не Excel. Ответ сервера: {preview}"
 
     except Exception as e:
-        # При сбое сети fallback на кеш
+        # 4. Обработка ошибок сети с fallback на кэш
         if os.path.exists(cache_filename):
             with open(cache_filename, "rb") as f:
                 content = f.read()
             if content.startswith(b'PK'):
-                return io.BytesIO(content), f"⚠️ Сбой сети при обращении к NAS ({e}). Использована локальная копия из кеша."
+                return io.BytesIO(content), f"⚠️ Сбой сети при обращении к NAS ({e}). Использована локальная копия из кэша."
         
         return None, f"❌ Ошибка подключения к NAS: {e}"
