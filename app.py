@@ -88,71 +88,82 @@ st.markdown("Серьезный постраничный аналитическ�
 def load_hierarchy_data(file_bytes):
     df_raw = pd.read_excel(file_bytes, header=None)
     
+    # 1. Парсинг интервалов просрочки
     aging_data = []
-    for idx in range(9, 16):
-        if idx >= len(df_raw):
-            break
+    for idx in range(0, min(20, len(df_raw))):
         r = df_raw.iloc[idx]
         if pd.notna(r.iloc[1]) or pd.notna(r.iloc[6]):
             interval = r.iloc[1] if pd.notna(r.iloc[1]) else r.iloc[0]
-            if str(interval).strip() != "Наименование интервала":
+            if str(interval).strip() not in ["Наименование интервала", "nan", "None", ""]:
                 aging_data.append({
                     'Интервал': str(interval).strip(),
-                    'Долг': float(r.iloc[6]) if pd.notna(r.iloc[6]) else 0.0,
-                    'Доля (%)': float(r.iloc[7]) if pd.notna(r.iloc[7]) else 0.0
+                    'Долг': float(r.iloc[6]) if pd.notna(r.iloc[6]) and str(r.iloc[6]).replace('.','',1).isdigit() else 0.0,
+                    'Доля (%)': float(r.iloc[7]) if pd.notna(r.iloc[7]) and str(r.iloc[7]).replace('.','',1).isdigit() else 0.0
                 })
     df_aging = pd.DataFrame(aging_data)
     
     hierarchy = []
     current_client_data = None
     
+    def safe_float(val):
+        try:
+            val_str = str(val).replace(',', '.').replace(' ', '').strip()
+            return float(val_str)
+        except:
+            return 0.0
+
+    # 2. Динамический поиск начала таблицы контрагентов
+    start_row = 0
     for idx, row in df_raw.iterrows():
-        if idx < 21:
-            continue
-        if idx >= len(df_raw) - 1:
+        row_str = " ".join([str(v) for v in row.values])
+        if "Контрагент" in row_str or "Клиент" in row_str or "Партнер" in row_str:
+            start_row = idx + 1
+            break
+    
+    if start_row == 0:
+        start_row = 15  # Резервный старт, если заголовок не найден
+    
+    # 3. Разбор клиентов и связанных заказов
+    for idx in range(start_row, len(df_raw)):
+        row = df_raw.iloc[idx]
+        col_0 = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
+        col_2 = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ""
+        
+        # Завершение при встрече блока "Итого"
+        if col_2 == "Итого" or "Итого" in [str(x) for x in row.values[:5]]:
             break
             
-        col_0 = row.iloc[0]
-        col_2 = row.iloc[2]
+        # Определяем, является ли строка клиентом (номер/число в первой колонке)
+        is_client_row = col_0.replace('.', '').isdigit() and len(col_0) > 0
         
-        if str(col_2).strip() == "Итого" or str(row.iloc[9]).strip() == "Итого":
-            break
-        
-        def safe_float(val):
-            try:
-                return float(val)
-            except:
-                return 0.0
-
-        if pd.notna(col_0) and isinstance(col_0, (int, float)) and not (isinstance(col_2, str) and col_2.startswith('Заказ')):
+        if is_client_row and not col_2.startswith('Заказ'):
             if current_client_data:
                 hierarchy.append(current_client_data)
                 
             current_client_data = {
-                'Клиент': str(col_2).strip(),
+                'Клиент': col_2,
                 'Общий долг': safe_float(row.iloc[9]),
                 'Доля долга (%)': safe_float(row.iloc[11]),
                 'Просрочено': safe_float(row.iloc[13]),
                 'Просрочено (%)': safe_float(row.iloc[14]),
                 'Дней просрочки': safe_float(row.iloc[15]),
-                'Наш долг': safe_float(row.iloc[16]),
-                'К отгрузке': safe_float(row.iloc[17]),
-                'Не просрочено': safe_float(row.iloc[18]),
-                'Комментарий': str(row.iloc[19]).strip() if pd.notna(row.iloc[19]) else '',
+                'Наш долг': safe_float(row.iloc[16]) if len(row) > 16 else 0.0,
+                'К отгрузке': safe_float(row.iloc[17]) if len(row) > 17 else 0.0,
+                'Не просрочено': safe_float(row.iloc[18]) if len(row) > 18 else 0.0,
+                'Комментарий': str(row.iloc[19]).strip() if len(row) > 19 and pd.notna(row.iloc[19]) else '',
                 'Заказы': []
             }
-        else:
-            if current_client_data is not None:
-                current_client_data['Заказы'].append({
-                    'Объект расчетов': str(col_2).strip() if pd.notna(col_2) else '',
-                    'Общий долг': safe_float(row.iloc[9]),
-                    'Просрочено': safe_float(row.iloc[13]),
-                    'Дней просрочки': safe_float(row.iloc[15]),
-                    'Наш долг': safe_float(row.iloc[16]),
-                    'К отгрузке': safe_float(row.iloc[17]),
-                    'Не просрочено': safe_float(row.iloc[18]),
-                    'Комментарий': str(row.iloc[19]).strip() if pd.notna(row.iloc[19]) else ''
-                })
+        elif current_client_data is not None and col_2:
+            current_client_data['Заказы'].append({
+                'Объект расчетов': col_2,
+                'Общий долг': safe_float(row.iloc[9]),
+                'Просрочено': safe_float(row.iloc[13]),
+                'Дней просрочки': safe_float(row.iloc[15]),
+                'Наш долг': safe_float(row.iloc[16]) if len(row) > 16 else 0.0,
+                'К отгрузке': safe_float(row.iloc[17]) if len(row) > 17 else 0.0,
+                'Не просрочено': safe_float(row.iloc[18]) if len(row) > 18 else 0.0,
+                'Комментарий': str(row.iloc[19]).strip() if len(row) > 19 and pd.notna(row.iloc[19]) else ''
+            })
 
     if current_client_data:
         hierarchy.append(current_client_data)
@@ -166,10 +177,9 @@ if target_file is not None:
     st.info(fetch_message)
     df_aging, hierarchy = load_hierarchy_data(target_file)
     
-    # Защитная проверка: если данные не распарсились
+    # Защитная проверка
     if not hierarchy:
         st.warning("⚠️ Файл загружен, но данные контрагентов не найдены. Проверьте структуру строк в файле 'ПДЗ.xlsx'.")
-        # Вывод первых строк для отладки структуры
         df_debug = pd.read_excel(target_file, header=None)
         with st.expander("🔍 Посмотреть сырые данные из Excel"):
             st.dataframe(df_debug.head(30))
