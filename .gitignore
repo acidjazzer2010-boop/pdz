@@ -1,0 +1,12 @@
+.streamlit/secrets.toml
+
+# Локальные логи и таблицы
+access_log.csv
+*.xlsx
+*.log
+
+# Кэш Python и виртуальные окружения
+__pycache__/
+*.pyc
+venv/
+.env
