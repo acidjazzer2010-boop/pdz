@@ -396,7 +396,7 @@ if active_module == "🧮 Анализ денежных потоков":
             {cf_df.to_html(index=False, border=0)}
 
             <div class="footer">
-                Сгенерировано в сервисе KRAYVIN Financial Analytics
+                2026
             </div>
         </div>
     </body>
