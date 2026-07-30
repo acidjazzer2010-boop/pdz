@@ -42,10 +42,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
+# --- 2. СКРЫТЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
 
 def get_client_ip():
-    """Получает публичный IP-адрес клиента из заголовков Streamlit."""
+    """Скрыто получает публичный IP-адрес клиента из заголовков Streamlit."""
     try:
         headers = st.context.headers
         if "X-Forwarded-For" in headers:
@@ -56,8 +56,8 @@ def get_client_ip():
         pass
     return "127.0.0.1 (Local/Unknown)"
 
-def log_access_event(username, status, role="—"):
-    """Записывает событие входа в локальный файл access_log.csv."""
+def log_access_event_silent(username, status, role="—"):
+    """Фоново записывает событие входа в локальный файл access_log.csv."""
     log_file = "access_log.csv"
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ip_address = get_client_ip()
@@ -75,22 +75,40 @@ def log_access_event(username, status, role="—"):
     else:
         new_entry.to_csv(log_file, mode='w', header=True, index=False, encoding='utf-8-sig')
 
-def send_security_alert(attempted_username, ip_address):
-    """Отправляет уведомление о неудачной попытке входа."""
+def send_security_alert_silent(attempted_username, ip_address, is_success, role="—"):
+    """Скрыто отправляет почтовое уведомление о входе на e.hasanov@kraivin.ru."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    target_email = "e.hasanov@kraivin.ru"
+    
+    if is_success:
+        subject_icon = "✅"
+        status_text = "Успешная авторизация"
+        color = "#28a745"
+    else:
+        subject_icon = "⚠️"
+        status_text = "ОШИБКА АВТОРИЗАЦИИ (Неверный пароль)"
+        color = "#dc3545"
+
     alert_html = f"""
-    <h3>⚠️ Внимание: Неудачная попытка входа в систему KRAYVIN!</h3>
-    <p><b>Дата и время:</b> {now}</p>
-    <p><b>Попытка входа под логином:</b> {attempted_username}</p>
-    <p><b>IP-адрес источника:</b> {ip_address}</p>
-    <hr>
-    <p><i>Если это были не вы, рекомендуем проверить настройки безопасности.</i></p>
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333;">
+        <h3 style="color: {color};">{subject_icon} Служебное уведомление безопасности KRAYVIN</h3>
+        <p><b>Статус попытки:</b> <span style="color: {color}; font-weight: bold;">{status_text}</span></p>
+        <p><b>Дата и время:</b> {now}</p>
+        <p><b>Введенный логин:</b> {attempted_username}</p>
+        <p><b>Назначенная роль:</b> {role}</p>
+        <p><b>IP-адрес пользователя:</b> {ip_address}</p>
+        <hr style="border: none; border-top: 1px solid #ccc;">
+        <p style="font-size: 12px; color: #777;"><i>Автоматическое сообщение системы мониторинга доступа.</i></p>
+    </body>
+    </html>
     """
     
-    # Отправка на Email (если подключен модуль exporter)
-    admin_email = st.secrets.get("security", {}).get("alert_email", "security@krayvin.ru")
     if send_report_via_email:
-        send_report_via_email(alert_html, admin_email)
+        try:
+            send_report_via_email(alert_html, target_email)
+        except Exception:
+            pass  # Фоновая отправка не блокирует работу пользователей
 
 # --- 3. ЕДИНАЯ АВТОРИЗАЦИЯ И СЕССИЯ ---
 if "authenticated" not in st.session_state:
@@ -100,19 +118,23 @@ if "authenticated" not in st.session_state:
     st.session_state.name = None
 
 def verify_credentials(username, password):
-    # Получаем пользователей строго из st.secrets. Если не задано — пустой словарь
     users_dict = st.secrets.get("users", {})
-    
     ip_addr = get_client_ip()
     
     if username in users_dict and users_dict[username].get("password") == password:
         role = users_dict[username].get("role", "Сотрудник")
         name = users_dict[username].get("name", username)
-        log_access_event(username, "SUCCESS", role)
+        
+        # Скрытое логгирование и отправка уведомления о ВХОДЕ
+        log_access_event_silent(username, "SUCCESS", role)
+        send_security_alert_silent(username, ip_addr, is_success=True, role=role)
+        
         return True, role, name
     else:
-        log_access_event(username, "FAILED_LOGIN", "—")
-        send_security_alert(username, ip_addr)
+        # Скрытое логгирование и отправка уведомления об ОШИБКЕ
+        log_access_event_silent(username, "FAILED_LOGIN", "—")
+        send_security_alert_silent(username, ip_addr, is_success=False, role="—")
+        
         return False, None, None
 
 # Экран входа
@@ -144,7 +166,6 @@ if os.path.exists(logo_path):
 
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
-st.sidebar.caption(f"🌐 IP: `{get_client_ip()}`")
 
 if st.sidebar.button("🚪 Выйти из системы"):
     st.session_state.authenticated = False
@@ -155,60 +176,19 @@ if st.sidebar.button("🚪 Выйти из системы"):
 
 st.sidebar.markdown("---")
 
-# Переключатель сервисов
+# Переключатель только рабочих сервисов
 active_module = st.sidebar.radio(
     "📌 Выберите сервис:",
     ["🧮 Анализ денежных потоков", "📈 Управление дебиторской задолженностью"]
 )
 
-# Просмотр журнала посещений (Только для роли "Директор")
-if st.session_state.role == "Директор":
-    st.sidebar.markdown("---")
-    if st.sidebar.checkbox("📜 Журнал посещений (Log)"):
-        active_module = "📜 Журнал посещений"
-
 st.sidebar.markdown("---")
-
-
-# ==============================================================================
-# МОДУЛЬ: ЖУРНАЛ ПОСЕЩЕНИЙ (ТОЛЬКО ДЛЯ АДМИНИСТРАТОРА)
-# ==============================================================================
-if active_module == "📜 Журнал посещений":
-    st.title("📜 Журнал безопасности и посещений системы")
-    st.markdown("Мониторинг подключений, IP-адресов и попыток несанкционированного доступа.")
-
-    if os.path.exists("access_log.csv"):
-        log_df = pd.read_csv("access_log.csv")
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Всего подключений", len(log_df))
-        c2.metric("Успешных входов", len(log_df[log_df["Status"] == "SUCCESS"]))
-        c3.metric("Подозрительных попыток", len(log_df[log_df["Status"] == "FAILED_LOGIN"]), delta_color="inverse")
-
-        st.subheader("Таблица активности")
-        st.dataframe(
-            log_df.sort_values(by="Timestamp", ascending=False),
-            column_config={
-                "Timestamp": "Время",
-                "Username": "Логин",
-                "Status": "Статус",
-                "IP_Address": "IP-Адрес",
-                "Role": "Роль"
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-
-        csv_bytes = log_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-        st.download_button("📥 Скачать журнал (CSV)", data=csv_bytes, file_name="access_log.csv", mime="text/csv")
-    else:
-        st.info("Журнал посещений пока пуст.")
 
 
 # ==============================================================================
 # МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР ДЕНЕЖНЫХ ПОТОКОВ
 # ==============================================================================
-elif active_module == "🧮 Анализ денежных потоков":
+if active_module == "🧮 Анализ денежных потоков":
     st.title("Анализ денежных потоков и рентабельности")
     st.markdown("Интерактивная финансовая модель для сценарного анализа кассовых разрывов.")
 
