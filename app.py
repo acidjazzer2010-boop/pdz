@@ -7,7 +7,7 @@ import os
 import datetime
 from io import BytesIO
 
-# Импорт ваших модулей
+# --- ИМПОРТ ВНЕШНИХ МОДУЛЕЙ ---
 try:
     from drive_sync import fetch_latest_report_from_nas
 except ImportError:
@@ -76,9 +76,13 @@ def log_access_event_silent(username, status, role="—"):
         new_entry.to_csv(log_file, mode='w', header=True, index=False, encoding='utf-8-sig')
 
 def send_security_alert_silent(attempted_username, ip_address, is_success, role="—"):
-    """Скрыто отправляет почтовое уведомление о входе на e.hasanov@kraivin.ru."""
+    """Скрыто отправляет почтовое уведомление о входе на адрес из st.secrets."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    target_email = "e.hasanov@kraivin.ru"
+    
+    target_email = (
+        st.secrets.get("ALERT_EMAIL") 
+        or st.secrets.get("security", {}).get("alert_email", "e.hasanov@kraivin.ru")
+    )
     
     if is_success:
         subject_icon = "✅"
@@ -89,9 +93,11 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
         status_text = "ОШИБКА АВТОРИЗАЦИИ (Неверный пароль)"
         color = "#dc3545"
 
+    subject_line = f"{subject_icon} Безопасность: Вход '{attempted_username}' [{status_text}]"
+
     alert_html = f"""
     <html>
-    <body style="font-family: Arial, sans-serif; color: #333;">
+    <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.5;">
         <h3 style="color: {color};">{subject_icon} Служебное уведомление безопасности KRAYVIN</h3>
         <p><b>Статус попытки:</b> <span style="color: {color}; font-weight: bold;">{status_text}</span></p>
         <p><b>Дата и время:</b> {now}</p>
@@ -106,9 +112,14 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
     
     if send_report_via_email:
         try:
-            send_report_via_email(alert_html, target_email)
-        except Exception:
-            pass  # Фоновая отправка не блокирует работу пользователей
+            send_report_via_email(
+                html_content=alert_html, 
+                recipient_email=target_email, 
+                subject=subject_line, 
+                as_attachment=False
+            )
+        except Exception as e:
+            print(f"[SECURITY ALERT EXCEPTION]: {e}")
 
 # --- 3. ЕДИНАЯ АВТОРИЗАЦИЯ И СЕССИЯ ---
 if "authenticated" not in st.session_state:
@@ -125,13 +136,11 @@ def verify_credentials(username, password):
         role = users_dict[username].get("role", "Сотрудник")
         name = users_dict[username].get("name", username)
         
-        # Скрытое логгирование и отправка уведомления о ВХОДЕ
         log_access_event_silent(username, "SUCCESS", role)
         send_security_alert_silent(username, ip_addr, is_success=True, role=role)
         
         return True, role, name
     else:
-        # Скрытое логгирование и отправка уведомления об ОШИБКЕ
         log_access_event_silent(username, "FAILED_LOGIN", "—")
         send_security_alert_silent(username, ip_addr, is_success=False, role="—")
         
@@ -167,7 +176,7 @@ if os.path.exists(logo_path):
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 
-if st.sidebar.button("🚪 Выйти из системы"):
+if st.sidebar.button("🚪 Выйти из системы", key="logout_btn"):
     st.session_state.authenticated = False
     st.session_state.username = None
     st.session_state.role = None
@@ -176,7 +185,6 @@ if st.sidebar.button("🚪 Выйти из системы"):
 
 st.sidebar.markdown("---")
 
-# Переключатель только рабочих сервисов
 active_module = st.sidebar.radio(
     "📌 Выберите сервис:",
     ["🧮 Анализ денежных потоков", "📈 Управление дебиторской задолженностью"]
