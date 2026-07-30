@@ -42,7 +42,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. ВСПАМОГАТЕЛЬНЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
+# --- 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
 
 def get_client_ip():
     """Получает публичный IP-адрес клиента из заголовков Streamlit."""
@@ -87,7 +87,7 @@ def send_security_alert(attempted_username, ip_address):
     <p><i>Если это были не вы, рекомендуем проверить настройки безопасности.</i></p>
     """
     
-    # 1. Отправка на Email (если подключен модуль exporter)
+    # Отправка на Email (если подключен модуль exporter)
     admin_email = st.secrets.get("security", {}).get("alert_email", "security@krayvin.ru")
     if send_report_via_email:
         send_report_via_email(alert_html, admin_email)
@@ -100,16 +100,14 @@ if "authenticated" not in st.session_state:
     st.session_state.name = None
 
 def verify_credentials(username, password):
-    users_dict = st.secrets.get("users", {
-        "admin": {"password": "password", "role": "Директор", "name": "Администратор"},
-        "manager": {"password": "password", "role": "Финансист", "name": "Менеджер"}
-    })
+    # Получаем пользователей строго из st.secrets. Если не задано — пустой словарь
+    users_dict = st.secrets.get("users", {})
     
     ip_addr = get_client_ip()
     
-    if username in users_dict and users_dict[username]["password"] == password:
-        role = users_dict[username]["role"]
-        name = users_dict[username]["name"]
+    if username in users_dict and users_dict[username].get("password") == password:
+        role = users_dict[username].get("role", "Сотрудник")
+        name = users_dict[username].get("name", username)
         log_access_event(username, "SUCCESS", role)
         return True, role, name
     else:
@@ -136,7 +134,7 @@ if not st.session_state.authenticated:
                     st.session_state.name = name
                     st.rerun()
                 else:
-                    st.error("❌ Неверный логин или пароль. Информация об инциденте записана.")
+                    st.error("❌ Неверный логин или пароль.")
     st.stop()
 
 # --- 4. БОКОВАЯ ПАНЕЛЬ И НАВИГАЦИЯ ---
