@@ -22,7 +22,7 @@ except ImportError:
 
 # --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
-    page_title="Личный кабинет",
+    page_title="Личный кабинет KRAYVIN",
     page_icon="🍷",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -96,16 +96,30 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
     subject_line = f"{subject_icon} Безопасность: Вход '{attempted_username}' [{status_text}]"
 
     alert_html = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.5;">
-        <h3 style="color: {color};">{subject_icon} Служебное уведомление безопасности KRAYVIN</h3>
-        <p><b>Статус попытки:</b> <span style="color: {color}; font-weight: bold;">{status_text}</span></p>
-        <p><b>Дата и время:</b> {now}</p>
-        <p><b>Введенный логин:</b> {attempted_username}</p>
-        <p><b>Назначенная роль:</b> {role}</p>
-        <p><b>IP-адрес пользователя:</b> {ip_address}</p>
-        <hr style="border: none; border-top: 1px solid #ccc;">
-        <p style="font-size: 12px; color: #777;"><i>Автоматическое сообщение системы мониторинга доступа.</i></p>
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; line-height: 1.5; background-color: #f5f5f7; padding: 20px; }}
+            .card {{ background: #ffffff; border-radius: 12px; padding: 24px; max-width: 550px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-left: 6px solid {color}; }}
+            h3 {{ color: #642A38; margin-top: 0; }}
+            .status {{ color: {color}; font-weight: 700; display: inline-block; padding: 4px 8px; background: rgba(0,0,0,0.04); border-radius: 6px; }}
+            hr {{ border: none; border-top: 1px solid #e5e5ea; margin: 20px 0; }}
+            .footer {{ font-size: 12px; color: #8e8e93; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h3>{subject_icon} Служебное уведомление безопасности</h3>
+            <p><b>Статус попытки:</b> <span class="status">{status_text}</span></p>
+            <p><b>Дата и время:</b> {now}</p>
+            <p><b>Введенный логин:</b> {attempted_username}</p>
+            <p><b>Назначенная роль:</b> {role}</p>
+            <p><b>IP-адрес пользователя:</b> {ip_address}</p>
+            <hr>
+            <p class="footer">Система мониторинга доступа KRAYVIN</p>
+        </div>
     </body>
     </html>
     """
@@ -148,7 +162,7 @@ def verify_credentials(username, password):
 
 # Экран входа
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет KRAYVIN</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -316,26 +330,78 @@ if active_module == "🧮 Анализ денежных потоков":
     # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 1) ---
     st.divider()
     st.subheader("📤 Экспорт финансовой модели")
-    exp_col1, exp_col2 = st.columns(2)
     
+    cf_df = pd.DataFrame({
+        "Месяц": x_labels,
+        "Выручка (₽)": [f"{v:,.0f}".replace(",", " ") for v in rev],
+        "Поступления (₽)": [f"{v:,.0f}".replace(",", " ") for v in inflows],
+        "Выплаты (₽)": [f"{v:,.0f}".replace(",", " ") for v in outflows],
+        "Чистый ДП (₽)": [f"{v:,.0f}".replace(",", " ") for v in net_cf],
+        "Остаток ДС (₽)": [f"{v:,.0f}".replace(",", " ") for v in cash_balance]
+    })
+
+    # Премиальный HTML-шаблон для macOS / Apple устройств
+    html_cf_report = f"""
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; background-color: #f5f5f7; margin: 0; padding: 40px 20px; }}
+            .container {{ max-width: 960px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }}
+            .header {{ border-bottom: 2px solid #642A38; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }}
+            h1 {{ color: #642A38; margin: 0; font-size: 24px; font-weight: 700; }}
+            .date {{ color: #8e8e93; font-size: 14px; }}
+            .metrics-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }}
+            .metric-card {{ background: #fafafa; border: 1px solid #e5e5ea; border-radius: 12px; padding: 16px; border-left: 4px solid #642A38; }}
+            .metric-label {{ font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }}
+            .metric-value {{ font-size: 18px; font-weight: 700; color: #1d1d1f; }}
+            table {{ width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e5ea; }}
+            th {{ background-color: #642A38; color: #ffffff; text-align: left; padding: 12px 16px; font-size: 13px; font-weight: 600; }}
+            td {{ padding: 12px 16px; border-bottom: 1px solid #e5e5ea; font-size: 13px; color: #3a3a3c; }}
+            tr:nth-child(even) {{ background-color: #fbfbfd; }}
+            tr:last-child td {{ border-bottom: none; }}
+            .footer {{ margin-top: 32px; text-align: center; color: #8e8e93; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>📊 Финансовая модель денежных потоков</h1>
+                <div class="date">{datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}</div>
+            </div>
+            
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Выручка ({period} мес)</div>
+                    <div class="metric-value">{format_rub(sum(rev))}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Макс. Кассовый разрыв</div>
+                    <div class="metric-value" style="color: #d70015;">{format_rub(max_deficit)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Чистая прибыль</div>
+                    <div class="metric-value">{format_rub(net_profit)}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Рентабельность</div>
+                    <div class="metric-value">{roi:.1f}%</div>
+                </div>
+            </div>
+
+            {cf_df.to_html(index=False, border=0)}
+
+            <div class="footer">
+                Сгенерировано в сервисе KRAYVIN Financial Analytics
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    exp_col1, exp_col2 = st.columns(2)
     with exp_col1:
-        cf_df = pd.DataFrame({
-            "Месяц": x_labels,
-            "Выручка": rev,
-            "Поступления": inflows,
-            "Выплаты": outflows,
-            "Чистый ДП": net_cf,
-            "Остаток ДС": cash_balance
-        })
-        html_cf_report = f"""
-        <html>
-        <body>
-            <h2>Отчет по денежным потокам (KRAYVIN)</h2>
-            <p><b>Горизонт:</b> {period} мес. | <b>Выручка:</b> {format_rub(sum(rev))} | <b>ЧП:</b> {format_rub(net_profit)}</p>
-            {cf_df.to_html(index=False, border=1)}
-        </body>
-        </html>
-        """
         st.download_button(
             label="📥 Скачать финансовую модель (HTML)",
             data=html_cf_report,
@@ -422,19 +488,72 @@ elif active_module == "📈 Управление дебиторской задо
             # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 2) ---
             st.divider()
             st.subheader("📤 Экспорт отчета по ПДЗ")
-            exp_col1, exp_col2 = st.columns(2)
 
+            # Форматируем данные таблицы ПДЗ для HTML
+            export_df = clients_df.copy()
+            export_df['Общий долг (₽)'] = export_df['Общий долг'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
+            export_df['Просрочено (₽)'] = export_df['Просрочено'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
+            export_df['Не просрочено (₽)'] = export_df['Не просрочено'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
+            export_df['Просрочено (%)'] = export_df['Просрочено (%)'].apply(lambda x: f"{x:.1f}%")
+
+            # Красивый HTML-отчет, идеально оптимизированный под macOS
             html_pdz_report = f"""
-            <html>
+            <!DOCTYPE html>
+            <html lang="ru">
+            <head>
+                <meta charset="utf-8">
+                <style>
+                    body {{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; background-color: #f5f5f7; margin: 0; padding: 40px 20px; }}
+                    .container {{ max-width: 980px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }}
+                    .header {{ border-bottom: 2px solid #642A38; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }}
+                    h1 {{ color: #642A38; margin: 0; font-size: 24px; font-weight: 700; }}
+                    .date {{ color: #8e8e93; font-size: 14px; }}
+                    .metrics-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }}
+                    .metric-card {{ background: #fafafa; border: 1px solid #e5e5ea; border-radius: 12px; padding: 16px; border-left: 4px solid #642A38; }}
+                    .metric-label {{ font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }}
+                    .metric-value {{ font-size: 20px; font-weight: 700; color: #1d1d1f; }}
+                    table {{ width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e5ea; }}
+                    th {{ background-color: #642A38; color: #ffffff; text-align: left; padding: 12px 16px; font-size: 13px; font-weight: 600; }}
+                    td {{ padding: 12px 16px; border-bottom: 1px solid #e5e5ea; font-size: 13px; color: #3a3a3c; }}
+                    tr:nth-child(even) {{ background-color: #fbfbfd; }}
+                    tr:last-child td {{ border-bottom: none; }}
+                    .overdue {{ color: #d70015; font-weight: 600; }}
+                    .footer {{ margin-top: 32px; text-align: center; color: #8e8e93; font-size: 12px; }}
+                </style>
+            </head>
             <body>
-                <h2>Сводный отчет по дебиторской задолженности</h2>
-                <p><b>Дата генерации:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
-                <p><b>Общий портфель:</b> {total_portfolio:,.2f} ₽ | <b>ПДЗ:</b> {total_overdue:,.2f} ₽</p>
-                {clients_df[['Клиент', 'Общий долг', 'Просрочено', 'Не просрочено', 'Просрочено (%)']].to_html(index=False, border=1)}
+                <div class="container">
+                    <div class="header">
+                        <h1>📈 Отчет по дебиторской задолженности</h1>
+                        <div class="date">{datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}</div>
+                    </div>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Общий портфель долга</div>
+                            <div class="metric-value">{total_portfolio:,.2f}".replace(",", " ")} ₽</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Просрочено (ПДЗ)</div>
+                            <div class="metric-value overdue">{total_overdue:,.2f}".replace(",", " ")} ₽</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Всего контрагентов</div>
+                            <div class="metric-value">{len(clients_df)}</div>
+                        </div>
+                    </div>
+
+                    {export_df[['Клиент', 'Общий долг (₽)', 'Просрочено (₽)', 'Не просрочено (₽)', 'Просрочено (%)']].to_html(index=False, border=0)}
+
+                    <div class="footer">
+                        Сгенерировано в сервисе KRAYVIN Debt Management
+                    </div>
+                </div>
             </body>
             </html>
             """
 
+            exp_col1, exp_col2 = st.columns(2)
             with exp_col1:
                 st.download_button(
                     label="📥 Скачать отчет ПДЗ (HTML)",
@@ -446,7 +565,7 @@ elif active_module == "📈 Управление дебиторской задо
                 )
 
             with exp_col2:
-                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", "boss@company.com"), key="email_pdz")
+                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", "e.hasanov@kraivin.ru"), key="email_pdz")
                 if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_pdz_email"):
                     if send_report_via_email:
                         ok, msg = send_report_via_email(
@@ -463,3 +582,4 @@ elif active_module == "📈 Управление дебиторской задо
                         st.warning("Модуль exporter недоступен.")
     else:
         st.error(f"❌ {fetch_message}")
+    
