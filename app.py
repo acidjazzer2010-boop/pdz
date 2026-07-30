@@ -199,7 +199,6 @@ if st.sidebar.button("🚪 Выйти из системы", key="logout_btn"):
 
 st.sidebar.markdown("---")
 
-# Добавлен явный ключ key="main_active_module_radio" для устранения ошибки StreamlitDuplicateElementId
 active_module = st.sidebar.radio(
     "📌 Выберите сервис:",
     ["🧮 Анализ денежных потоков", "📈 Управление дебиторской задолженностью"],
@@ -314,20 +313,23 @@ if active_module == "🧮 Анализ денежных потоков":
         fig1 = go.Figure()
         fig1.add_trace(go.Scatter(x=x_labels, y=cash_balance, mode='lines+markers+text', name='Остаток ДС', text=[f"{v:,.0f}" for v in cash_balance], line=dict(color='#642A38', width=3), fill='tozeroy'))
         fig1.add_hline(y=0, line_dash="dash", line_color="red")
-        st.plotly_chart(fig1, use_container_width=True)
+        # Добавлен уникальный key для графика
+        st.plotly_chart(fig1, use_container_width=True, key="cf_chart_liquidity")
 
     with tab2:
         st.markdown("### Динамика маржинальности и EBITDA")
         fig3 = go.Figure()
         ebitda_vals = rev - opex - taxes_and_commissions
         fig3.add_trace(go.Bar(x=x_labels, y=ebitda_vals, name='EBITDA', marker_color='#642A38'))
-        st.plotly_chart(fig3, use_container_width=True)
+        # Добавлен уникальный key для графика
+        st.plotly_chart(fig3, use_container_width=True, key="cf_chart_ebitda")
 
     with tab3:
         st.markdown("### Накопленный денежный поток")
         fig5 = go.Figure()
         fig5.add_trace(go.Scatter(x=x_labels, y=cum_cf + initial_cash_buffer, mode='lines+markers', name='Накопленный ДС', line=dict(color='#642A38', width=3)))
-        st.plotly_chart(fig5, use_container_width=True)
+        # Добавлен уникальный key для графика
+        st.plotly_chart(fig5, use_container_width=True, key="cf_chart_cum_cf")
 
     # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 1) ---
     st.divider()
