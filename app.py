@@ -7,7 +7,7 @@ from drive_sync import fetch_latest_report_from_nas
 
 # Page configuration
 st.set_page_config(
-    page_title="Корпоративный отчет: Управление дебиторской задолженностью",
+    page_title="Управление дебиторской задолженностью",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -81,8 +81,7 @@ if st.sidebar.button("🚪 Выйти из системы"):
     st.session_state.name = None
     st.rerun()
 
-st.title("📈 Финансовый отчет: Управление дебиторской задолженностью")
-st.markdown("Серьезный постраничный аналитический комплекс для контроля портфеля и рисков.")
+st.title("📈 Управление дебиторской задолженностью")
 
 @st.cache_data
 def load_hierarchy_data(file_bytes):
@@ -133,7 +132,6 @@ def load_hierarchy_data(file_bytes):
 target_file, fetch_message = fetch_latest_report_from_nas()
 
 if target_file is not None:
-    st.info(fetch_message)
     df_aging, hierarchy = load_hierarchy_data(target_file)
     
     if not hierarchy:
@@ -155,7 +153,6 @@ if target_file is not None:
     total_not_overdue = clients_df['Не просрочено'].sum() if not clients_df.empty else 0.0
     overdue_share = (total_overdue / total_portfolio) * 100 if total_portfolio > 0 else 0.0
     
-    # Вычисление доли каждого клиента в общем портфеле
     if total_portfolio > 0:
         clients_df['Доля долга (%)'] = (clients_df['Общий долг'] / total_portfolio) * 100
 
