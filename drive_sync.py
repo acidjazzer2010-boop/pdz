@@ -6,7 +6,7 @@ def fetch_latest_report_from_nas():
     cache_filename = "last_downloaded_report.xlsx"
     
     # Прямая ссылка на файл (убедитесь, что файл лежит в папке web на NAS)
-    direct_url = "http://45.130.190.72:6783/ПДЗ.xlsx"
+    direct_url = "http://45.130.190.72:6783/fbsharing/download/i4LaNSCbE"
     
     try:
         response = requests.get(direct_url, timeout=20)
