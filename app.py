@@ -340,7 +340,6 @@ if active_module == "🧮 Анализ денежных потоков":
         "Остаток ДС (₽)": [f"{v:,.0f}".replace(",", " ") for v in cash_balance]
     })
 
-    # Премиальный HTML-шаблон для macOS / Apple устройств
     html_cf_report = f"""
     <!DOCTYPE html>
     <html lang="ru">
@@ -489,14 +488,16 @@ elif active_module == "📈 Управление дебиторской задо
             st.divider()
             st.subheader("📤 Экспорт отчета по ПДЗ")
 
-            # Форматируем данные таблицы ПДЗ для HTML
             export_df = clients_df.copy()
             export_df['Общий долг (₽)'] = export_df['Общий долг'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
             export_df['Просрочено (₽)'] = export_df['Просрочено'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
             export_df['Не просрочено (₽)'] = export_df['Не просрочено'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
             export_df['Просрочено (%)'] = export_df['Просрочено (%)'].apply(lambda x: f"{x:.1f}%")
 
-            # Красивый HTML-отчет, идеально оптимизированный под macOS
+            # Форматированные строковые значения для заголовка отчета
+            total_portfolio_fmt = f"{total_portfolio:,.2f}".replace(",", " ")
+            total_overdue_fmt = f"{total_overdue:,.2f}".replace(",", " ")
+
             html_pdz_report = f"""
             <!DOCTYPE html>
             <html lang="ru">
@@ -531,11 +532,11 @@ elif active_module == "📈 Управление дебиторской задо
                     <div class="metrics-grid">
                         <div class="metric-card">
                             <div class="metric-label">Общий портфель долга</div>
-                            <div class="metric-value">{total_portfolio:,.2f}".replace(",", " ")} ₽</div>
+                            <div class="metric-value">{total_portfolio_fmt} ₽</div>
                         </div>
                         <div class="metric-card">
                             <div class="metric-label">Просрочено (ПДЗ)</div>
-                            <div class="metric-value overdue">{total_overdue:,.2f}".replace(",", " ")} ₽</div>
+                            <div class="metric-value overdue">{total_overdue_fmt} ₽</div>
                         </div>
                         <div class="metric-card">
                             <div class="metric-label">Всего контрагентов</div>
@@ -582,4 +583,3 @@ elif active_module == "📈 Управление дебиторской задо
                         st.warning("Модуль exporter недоступен.")
     else:
         st.error(f"❌ {fetch_message}")
-    
