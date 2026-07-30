@@ -94,7 +94,7 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
         status_text = "ОШИБКА АВТОРИЗАЦИИ (Неверный пароль)"
         color = "#dc3545"
 
-    subject_line = f"{subject_icon} Безопасность KRAYVIN: Вход '{attempted_username}' [{status_text}]"
+    subject_line = f"{subject_icon} Безопасность: Вход '{attempted_username}' [{status_text}]"
 
     alert_html = f"""
     <html>
