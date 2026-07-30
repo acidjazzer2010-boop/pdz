@@ -166,8 +166,8 @@ if not st.session_state.authenticated:
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
-            username_input = st.text_input("Логин")
-            password_input = st.text_input("Пароль", type="password")
+            username_input = st.text_input("Логин", key="login_username_input")
+            password_input = st.text_input("Пароль", type="password", key="login_password_input")
             submit_button = st.form_submit_button("Войти в систему", use_container_width=True)
             
             if submit_button:
@@ -199,9 +199,11 @@ if st.sidebar.button("🚪 Выйти из системы", key="logout_btn"):
 
 st.sidebar.markdown("---")
 
+# Добавлен явный ключ key="main_active_module_radio" для устранения ошибки StreamlitDuplicateElementId
 active_module = st.sidebar.radio(
     "📌 Выберите сервис:",
-    ["🧮 Анализ денежных потоков", "📈 Управление дебиторской задолженностью"]
+    ["🧮 Анализ денежных потоков", "📈 Управление дебиторской задолженностью"],
+    key="main_active_module_radio"
 )
 
 st.sidebar.markdown("---")
@@ -217,35 +219,35 @@ if active_module == "🧮 Анализ денежных потоков":
     st.sidebar.header("Параметры финансовой модели")
     ru_months_full = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
     col_m, col_y = st.sidebar.columns(2)
-    start_month_idx = col_m.selectbox("Месяц старта", range(12), format_func=lambda x: ru_months_full[x])
-    start_year = col_y.selectbox("Год старта", [2026, 2027])
+    start_month_idx = col_m.selectbox("Месяц старта", range(12), format_func=lambda x: ru_months_full[x], key="cf_start_month")
+    start_year = col_y.selectbox("Год старта", [2026, 2027], key="cf_start_year")
 
-    margin_pct = st.sidebar.slider("Маржинальность (%)", min_value=10, max_value=50, value=20, step=1)
-    period = st.sidebar.selectbox("Горизонт планирования (мес)", [6, 12, 18, 24])
+    margin_pct = st.sidebar.slider("Маржинальность (%)", min_value=10, max_value=50, value=20, step=1, key="cf_margin")
+    period = st.sidebar.selectbox("Горизонт планирования (мес)", [6, 12, 18, 24], key="cf_period")
 
     st.sidebar.subheader("Стартовый капитал и закупки")
-    initial_purchase = st.sidebar.number_input("Первоначальная закупка товара (руб)", value=5_000_000, step=500_000)
-    initial_cash_buffer = st.sidebar.number_input("Стартовый денежный буфер (на счете)", value=2_000_000, step=500_000)
+    initial_purchase = st.sidebar.number_input("Первоначальная закупка товара (руб)", value=5_000_000, step=500_000, key="cf_init_purchase")
+    initial_cash_buffer = st.sidebar.number_input("Стартовый денежный буфер (на счете)", value=2_000_000, step=500_000, key="cf_init_buffer")
 
     st.sidebar.subheader("Динамика продаж")
-    aov = st.sidebar.number_input("Средняя сумма заказа (руб)", value=150_000, step=10_000)
-    start_orders = st.sidebar.number_input("Заказов в 1-й месяц (шт)", value=40, step=1)
-    orders_growth = st.sidebar.slider("Ежемесячный прирост заказов (%)", 0, 100, 15, step=1)
-    scale_factor = st.sidebar.slider("Коэффициент масштабирования продаж", 0.5, 3.0, 1.0, 0.1)
+    aov = st.sidebar.number_input("Средняя сумма заказа (руб)", value=150_000, step=10_000, key="cf_aov")
+    start_orders = st.sidebar.number_input("Заказов в 1-й месяц (шт)", value=40, step=1, key="cf_start_orders")
+    orders_growth = st.sidebar.slider("Ежемесячный прирост заказов (%)", 0, 100, 15, step=1, key="cf_orders_growth")
+    scale_factor = st.sidebar.slider("Коэффициент масштабирования продаж", 0.5, 3.0, 1.0, 0.1, key="cf_scale_factor")
 
     st.sidebar.subheader("Команда и расходы")
-    monthly_fot = st.sidebar.number_input("ФОТ в месяц (руб)", value=500_000, step=50_000)
+    monthly_fot = st.sidebar.number_input("ФОТ в месяц (руб)", value=500_000, step=50_000, key="cf_monthly_fot")
 
     st.sidebar.subheader("Работа с поставщиками")
-    prepayment_pct = st.sidebar.slider("Предоплата поставщикам (%)", 0, 100, 50, step=10)
-    delay_days = st.sidebar.slider("Отсрочка на остаток (дней)", 0, 90, 40, step=5)
+    prepayment_pct = st.sidebar.slider("Предоплата поставщикам (%)", 0, 100, 50, step=10, key="cf_prepayment")
+    delay_days = st.sidebar.slider("Отсрочка на остаток (дней)", 0, 90, 40, step=5, key="cf_delay_days")
 
     st.sidebar.subheader("Факторинг")
-    factoring_share = st.sidebar.slider("Доля выручки в факторинге (%)", 0, 100, 50, step=10)
-    factoring_advance = st.sidebar.slider("Аванс от фактора (%)", 50, 100, 80, step=5)
+    factoring_share = st.sidebar.slider("Доля выручки в факторинге (%)", 0, 100, 50, step=10, key="cf_fact_share")
+    factoring_advance = st.sidebar.slider("Аванс от фактора (%)", 50, 100, 80, step=5, key="cf_fact_advance")
 
     st.sidebar.subheader("Условия с покупателями")
-    customer_delay_days = st.sidebar.slider("Отсрочка платежа покупателям (дней)", 0, 120, 70, step=5)
+    customer_delay_days = st.sidebar.slider("Отсрочка платежа покупателям (дней)", 0, 120, 70, step=5, key="cf_cust_delay")
 
     # Математические расчеты
     ru_months_short = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
@@ -494,7 +496,6 @@ elif active_module == "📈 Управление дебиторской задо
             export_df['Не просрочено (₽)'] = export_df['Не просрочено'].apply(lambda x: f"{x:,.2f}".replace(",", " "))
             export_df['Просрочено (%)'] = export_df['Просрочено (%)'].apply(lambda x: f"{x:.1f}%")
 
-            # Форматированные строковые значения для заголовка отчета
             total_portfolio_fmt = f"{total_portfolio:,.2f}".replace(",", " ")
             total_overdue_fmt = f"{total_overdue:,.2f}".replace(",", " ")
 
