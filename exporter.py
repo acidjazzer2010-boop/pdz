@@ -173,10 +173,6 @@ if not st.session_state.authenticated:
     st.stop()
 
 # --- 4. БОКОВАЯ ПАНЕЛЬ И НАВИГАЦИЯ ---
-logo_path = "КРАЙВИН лого винный квадрат.png"
-if os.path.exists(logo_path):
-    st.sidebar.image(logo_path, use_container_width=True)
-
 st.sidebar.markdown(f"👤 **{st.session_state.name}**")
 st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
 
