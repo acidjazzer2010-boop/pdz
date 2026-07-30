@@ -5,7 +5,20 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 import datetime
+import html
+import hmac
+import hashlib
 from io import BytesIO
+
+# Попытка импорта библиотеки для безопасного хеширования паролей
+try:
+    from werkzeug.security import check_password_hash
+except ImportError:
+    # Запасной вариант безопасного сравнения, если werkzeug не установлен
+    def check_password_hash(stored_hash, password):
+        # Ожидается хэш sha256
+        computed_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+        return hmac.compare_digest(stored_hash, computed_hash)
 
 # --- ИМПОРТ ВНЕШНИХ МОДУЛЕЙ ---
 try:
@@ -22,7 +35,7 @@ except ImportError:
 
 # --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
-    page_title="Личный кабинет",
+    page_title="Личный кабинет KRAYVIN",
     page_icon="🍷",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -45,44 +58,57 @@ st.markdown("""
 # --- 2. СКРЫТЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
 
 def get_client_ip():
-    """Скрыто получает публичный IP-адрес клиента из заголовков Streamlit."""
+    """Скрыто получает IP-адрес с базовой очисткой."""
     try:
         headers = st.context.headers
         if "X-Forwarded-For" in headers:
-            return headers["X-Forwarded-For"].split(",")[0].strip()
+            # Берем первый IP и фильтруем от невалидных символов
+            raw_ip = headers["X-Forwarded-For"].split(",")[0].strip()
+            return html.escape(raw_ip[:45])  # Ограничение длины IPv6
         elif "Remote-Addr" in headers:
-            return headers["Remote-Addr"]
+            return html.escape(headers["Remote-Addr"][:45])
     except Exception:
         pass
     return "127.0.0.1 (Local/Unknown)"
 
 def log_access_event_silent(username, status, role="—"):
-    """Фоново записывает событие входа в локальный файл access_log.csv."""
-    log_file = "access_log.csv"
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ip_address = get_client_ip()
-    
-    new_entry = pd.DataFrame([{
-        "Timestamp": now,
-        "Username": username,
-        "Status": status,
-        "IP_Address": ip_address,
-        "Role": role
-    }])
-    
-    if os.path.exists(log_file):
-        new_entry.to_csv(log_file, mode='a', header=False, index=False, encoding='utf-8-sig')
-    else:
-        new_entry.to_csv(log_file, mode='w', header=True, index=False, encoding='utf-8-sig')
+    """Фоново записывает событие входа с обработкой ошибок доступа к файлу."""
+    try:
+        log_file = "access_log.csv"
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ip_address = get_client_ip()
+        
+        # Экранируем имя пользователя для защиты CSV от инъекций
+        safe_username = html.escape(username[:50])
+        
+        new_entry = pd.DataFrame([{
+            "Timestamp": now,
+            "Username": safe_username,
+            "Status": status,
+            "IP_Address": ip_address,
+            "Role": role
+        }])
+        
+        if os.path.exists(log_file):
+            new_entry.to_csv(log_file, mode='a', header=False, index=False, encoding='utf-8-sig')
+        else:
+            new_entry.to_csv(log_file, mode='w', header=True, index=False, encoding='utf-8-sig')
+    except Exception as e:
+        print(f"[LOG ERROR] Не удалось записать лог: {e}")
 
 def send_security_alert_silent(attempted_username, ip_address, is_success, role="—"):
-    """Скрыто отправляет почтовое уведомление о входе на адрес из st.secrets."""
+    """Скрыто отправляет почтовое уведомление о входе с экранированием HTML-инъекций."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     target_email = (
         st.secrets.get("ALERT_EMAIL") 
         or st.secrets.get("security", {}).get("alert_email", "e.hasanov@kraivin.ru")
     )
+    
+    # Экранирование ввода пользователя от HTML/Header Injection
+    safe_username = html.escape(str(attempted_username)[:50]).replace('\n', '').replace('\r', '')
+    safe_ip = html.escape(str(ip_address)[:45])
+    safe_role = html.escape(str(role)[:30])
     
     if is_success:
         subject_icon = "✅"
@@ -93,7 +119,7 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
         status_text = "ОШИБКА АВТОРИЗАЦИИ (Неверный пароль)"
         color = "#dc3545"
 
-    subject_line = f"{subject_icon} Безопасность: Вход '{attempted_username}' [{status_text}]"
+    subject_line = f"{subject_icon} Безопасность: Вход '{safe_username}' [{status_text}]"
 
     alert_html = f"""
     <!DOCTYPE html>
@@ -101,7 +127,7 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
     <head>
         <meta charset="utf-8">
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; line-height: 1.5; background-color: #f5f5f7; padding: 20px; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; line-height: 1.5; background-color: #f5f5f7; padding: 20px; }}
             .card {{ background: #ffffff; border-radius: 12px; padding: 24px; max-width: 550px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-left: 6px solid {color}; }}
             h3 {{ color: #642A38; margin-top: 0; }}
             .status {{ color: {color}; font-weight: 700; display: inline-block; padding: 4px 8px; background: rgba(0,0,0,0.04); border-radius: 6px; }}
@@ -114,11 +140,11 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
             <h3>{subject_icon} Служебное уведомление безопасности</h3>
             <p><b>Статус попытки:</b> <span class="status">{status_text}</span></p>
             <p><b>Дата и время:</b> {now}</p>
-            <p><b>Введенный логин:</b> {attempted_username}</p>
-            <p><b>Назначенная роль:</b> {role}</p>
-            <p><b>IP-адрес пользователя:</b> {ip_address}</p>
+            <p><b>Введенный логин:</b> {safe_username}</p>
+            <p><b>Назначенная роль:</b> {safe_role}</p>
+            <p><b>IP-адрес пользователя:</b> {safe_ip}</p>
             <hr>
-            <p class="footer">Система мониторинга доступа</p>
+            <p class="footer">Система мониторинга доступа KRAYVIN</p>
         </div>
     </body>
     </html>
@@ -146,23 +172,36 @@ def verify_credentials(username, password):
     users_dict = st.secrets.get("users", {})
     ip_addr = get_client_ip()
     
-    if username in users_dict and users_dict[username].get("password") == password:
-        role = users_dict[username].get("role", "Сотрудник")
-        name = users_dict[username].get("name", username)
+    if username in users_dict:
+        user_data = users_dict[username]
+        stored_password = user_data.get("password")
+        stored_hash = user_data.get("password_hash")
         
-        log_access_event_silent(username, "SUCCESS", role)
-        send_security_alert_silent(username, ip_addr, is_success=True, role=role)
+        is_valid = False
         
-        return True, role, name
-    else:
-        log_access_event_silent(username, "FAILED_LOGIN", "—")
-        send_security_alert_silent(username, ip_addr, is_success=False, role="—")
-        
-        return False, None, None
+        # 1. Проверка по хешу (Рекомендуется)
+        if stored_hash:
+            is_valid = check_password_hash(stored_hash, password)
+        # 2. Обратная совместимость с открытым паролем через защищенное сравнение hmac
+        elif stored_password:
+            is_valid = hmac.compare_digest(stored_password, password)
+
+        if is_valid:
+            role = user_data.get("role", "Сотрудник")
+            name = user_data.get("name", username)
+            
+            log_access_event_silent(username, "SUCCESS", role)
+            send_security_alert_silent(username, ip_addr, is_success=True, role=role)
+            return True, role, name
+
+    # Если логин не найден или пароль неверный
+    log_access_event_silent(username, "FAILED_LOGIN", "—")
+    send_security_alert_silent(username, ip_addr, is_success=False, role="—")
+    return False, None, None
 
 # Экран входа
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет </h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет KRAYVIN</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -187,8 +226,8 @@ logo_path = "КРАЙВИН лого винный квадрат.png"
 if os.path.exists(logo_path):
     st.sidebar.image(logo_path, use_container_width=True)
 
-st.sidebar.markdown(f"👤 **{st.session_state.name}**")
-st.sidebar.markdown(f"🔑 Роль: {st.session_state.role}")
+st.sidebar.markdown(f"👤 **{html.escape(st.session_state.name)}**")
+st.sidebar.markdown(f"🔑 Роль: {html.escape(st.session_state.role)}")
 
 if st.sidebar.button("🚪 Выйти из системы", key="logout_btn"):
     st.session_state.authenticated = False
@@ -206,7 +245,6 @@ active_module = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-
 
 # ==============================================================================
 # МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР ДЕНЕЖНЫХ ПОТОКОВ
@@ -248,7 +286,7 @@ if active_module == "🧮 Анализ денежных потоков":
     st.sidebar.subheader("Условия с покупателями")
     customer_delay_days = st.sidebar.slider("Отсрочка платежа покупателям (дней)", 0, 120, 70, step=5, key="cf_cust_delay")
 
-    # Математические расчеты
+    # Расчеты
     ru_months_short = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
     x_labels = [f"{ru_months_short[(start_month_idx + i) % 12]} {start_year + ((start_month_idx + i) // 12)}" for i in range(period)]
 
@@ -313,7 +351,6 @@ if active_module == "🧮 Анализ денежных потоков":
         fig1 = go.Figure()
         fig1.add_trace(go.Scatter(x=x_labels, y=cash_balance, mode='lines+markers+text', name='Остаток ДС', text=[f"{v:,.0f}" for v in cash_balance], line=dict(color='#642A38', width=3), fill='tozeroy'))
         fig1.add_hline(y=0, line_dash="dash", line_color="red")
-        # Добавлен уникальный key для графика
         st.plotly_chart(fig1, use_container_width=True, key="cf_chart_liquidity")
 
     with tab2:
@@ -321,17 +358,15 @@ if active_module == "🧮 Анализ денежных потоков":
         fig3 = go.Figure()
         ebitda_vals = rev - opex - taxes_and_commissions
         fig3.add_trace(go.Bar(x=x_labels, y=ebitda_vals, name='EBITDA', marker_color='#642A38'))
-        # Добавлен уникальный key для графика
         st.plotly_chart(fig3, use_container_width=True, key="cf_chart_ebitda")
 
     with tab3:
         st.markdown("### Накопленный денежный поток")
         fig5 = go.Figure()
         fig5.add_trace(go.Scatter(x=x_labels, y=cum_cf + initial_cash_buffer, mode='lines+markers', name='Накопленный ДС', line=dict(color='#642A38', width=3)))
-        # Добавлен уникальный key для графика
         st.plotly_chart(fig5, use_container_width=True, key="cf_chart_cum_cf")
 
-    # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 1) ---
+    # --- ПАНЕЛЬ ЭКСПОРТА ---
     st.divider()
     st.subheader("📤 Экспорт финансовой модели")
     
@@ -396,7 +431,7 @@ if active_module == "🧮 Анализ денежных потоков":
             {cf_df.to_html(index=False, border=0)}
 
             <div class="footer">
-                2026
+                Конфиденциально
             </div>
         </div>
     </body>
@@ -415,9 +450,9 @@ if active_module == "🧮 Анализ денежных потоков":
         )
 
     with exp_col2:
-        target_email_input = st.text_input("Email для отправки модели:", value=st.secrets.get("ALERT_EMAIL", "boss@company.com"), key="email_cf")
+        target_email_input = st.text_input("Email для отправки модели:", value=st.secrets.get("ALERT_EMAIL", ""), key="email_cf")
         if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_cf_email"):
-            if send_report_via_email:
+            if send_report_via_email and target_email_input:
                 ok, msg = send_report_via_email(
                     html_content=html_cf_report,
                     recipient_email=target_email_input,
@@ -429,7 +464,7 @@ if active_module == "🧮 Анализ денежных потоков":
                 else:
                     st.error(f"❌ Ошибка отправки: {msg}")
             else:
-                st.warning("Модуль exporter недоступен.")
+                st.warning("Введите корректный E-mail или проверьте модуль отправки.")
 
 
 # ==============================================================================
@@ -488,7 +523,7 @@ elif active_module == "📈 Управление дебиторской задо
             
             st.dataframe(clients_df[['Клиент', 'Общий долг', 'Просрочено', 'Не просрочено']], use_container_width=True)
 
-            # --- ПАНЕЛЬ ЭКСПОРТА (МОДУЛЬ 2) ---
+            # --- ПАНЕЛЬ ЭКСПОРТА ---
             st.divider()
             st.subheader("📤 Экспорт отчета по ПДЗ")
 
@@ -550,7 +585,7 @@ elif active_module == "📈 Управление дебиторской задо
                     {export_df[['Клиент', 'Общий долг (₽)', 'Просрочено (₽)', 'Не просрочено (₽)', 'Просрочено (%)']].to_html(index=False, border=0)}
 
                     <div class="footer">
-                        2026
+                        Конфиденциально
                     </div>
                 </div>
             </body>
@@ -569,9 +604,9 @@ elif active_module == "📈 Управление дебиторской задо
                 )
 
             with exp_col2:
-                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", "boss@company.com"), key="email_pdz")
+                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", ""), key="email_pdz")
                 if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_pdz_email"):
-                    if send_report_via_email:
+                    if send_report_via_email and target_email_pdz:
                         ok, msg = send_report_via_email(
                             html_content=html_pdz_report,
                             recipient_email=target_email_pdz,
@@ -583,6 +618,6 @@ elif active_module == "📈 Управление дебиторской задо
                         else:
                             st.error(f"❌ Ошибка отправки: {msg}")
                     else:
-                        st.warning("Модуль exporter недоступен.")
+                        st.warning("Введите корректный E-mail или проверьте модуль отправки.")
     else:
         st.error(f"❌ {fetch_message}")
