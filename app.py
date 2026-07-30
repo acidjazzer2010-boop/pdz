@@ -22,7 +22,7 @@ except ImportError:
 
 # --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
-    page_title="Личный кабинет KRAYVIN",
+    page_title="Личный кабинет",
     page_icon="🍷",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -118,7 +118,7 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
             <p><b>Назначенная роль:</b> {role}</p>
             <p><b>IP-адрес пользователя:</b> {ip_address}</p>
             <hr>
-            <p class="footer">Система мониторинга доступа KRAYVIN</p>
+            <p class="footer">Система мониторинга доступа</p>
         </div>
     </body>
     </html>
@@ -415,7 +415,7 @@ if active_module == "🧮 Анализ денежных потоков":
         )
 
     with exp_col2:
-        target_email_input = st.text_input("Email для отправки модели:", value=st.secrets.get("ALERT_EMAIL", "e.hasanov@kraivin.ru"), key="email_cf")
+        target_email_input = st.text_input("Email для отправки модели:", value=st.secrets.get("ALERT_EMAIL", "boss@company.com"), key="email_cf")
         if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_cf_email"):
             if send_report_via_email:
                 ok, msg = send_report_via_email(
@@ -550,7 +550,7 @@ elif active_module == "📈 Управление дебиторской задо
                     {export_df[['Клиент', 'Общий долг (₽)', 'Просрочено (₽)', 'Не просрочено (₽)', 'Просрочено (%)']].to_html(index=False, border=0)}
 
                     <div class="footer">
-                        Сгенерировано в сервисе KRAYVIN Debt Management
+                        2026
                     </div>
                 </div>
             </body>
