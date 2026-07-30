@@ -162,7 +162,7 @@ def verify_credentials(username, password):
 
 # Экран входа
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет KRAYVIN</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет </h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -421,7 +421,7 @@ if active_module == "🧮 Анализ денежных потоков":
                 ok, msg = send_report_via_email(
                     html_content=html_cf_report,
                     recipient_email=target_email_input,
-                    subject="📊 Финансовая модель денежных потоков KRAYVIN",
+                    subject="📊 Финансовая модель денежных потоков",
                     as_attachment=True
                 )
                 if ok:
@@ -569,13 +569,13 @@ elif active_module == "📈 Управление дебиторской задо
                 )
 
             with exp_col2:
-                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", "e.hasanov@kraivin.ru"), key="email_pdz")
+                target_email_pdz = st.text_input("Email для отправки отчета:", value=st.secrets.get("ALERT_EMAIL", "boss@company.com"), key="email_pdz")
                 if st.button("📧 Отправить отчет по Email", use_container_width=True, key="send_pdz_email"):
                     if send_report_via_email:
                         ok, msg = send_report_via_email(
                             html_content=html_pdz_report,
                             recipient_email=target_email_pdz,
-                            subject="📈 Сводный отчет по дебиторской задолженности KRAYVIN",
+                            subject="📈 Сводный отчет по дебиторской задолженности",
                             as_attachment=True
                         )
                         if ok:
