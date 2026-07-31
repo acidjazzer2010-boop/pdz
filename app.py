@@ -193,7 +193,7 @@ def verify_credentials(username, password):
     return False, None, None
 
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет KRAYVIN</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет </h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
