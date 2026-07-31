@@ -23,7 +23,7 @@ except ImportError:
     send_report_via_email = None
 
 st.set_page_config(
-    page_title="Личный кабинет KRAYVIN",
+    page_title="Личный кабинет",
     page_icon="🍷",
     layout="wide",
     initial_sidebar_state="expanded"
