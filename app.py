@@ -10,7 +10,6 @@ import hmac
 import hashlib
 from io import BytesIO
 
-# --- ИМПОРТ ВНЕШНИХ МОДУЛЕЙ ---
 try:
     from drive_sync import fetch_latest_report_from_nas
 except ImportError:
@@ -23,7 +22,6 @@ except ImportError:
     send_report_to_email = None
     send_report_via_email = None
 
-# --- 1. НАСТРОЙКА СТРАНИЦЫ И ТЕМЫ ---
 st.set_page_config(
     page_title="Личный кабинет KRAYVIN",
     page_icon="🍷",
@@ -45,13 +43,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. СКРЫТЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
-
 def verify_hash(stored_hash_string, provided_password):
-    """
-    Безопасно сверяет введённый пароль с сохраненным хешем PBKDF2.
-    Защищено от атак по времени (Timing Attacks).
-    """
     try:
         parts = stored_hash_string.split('$')
         if len(parts) != 3:
@@ -67,7 +59,6 @@ def verify_hash(stored_hash_string, provided_password):
         return False
 
 def get_client_ip():
-    """Скрыто получает публичный IP-адрес клиента с базовой очисткой."""
     try:
         headers = st.context.headers
         if "X-Forwarded-For" in headers:
@@ -77,10 +68,9 @@ def get_client_ip():
             return html.escape(headers["Remote-Addr"][:45])
     except Exception:
         pass
-    return "127.0.0.1 (Local/Unknown)"
+    return "127.0.0.1"
 
 def log_access_event_silent(username, status, role="—"):
-    """Фоново записывает событие входа с защитой от CSV-инъекций и ошибок записи."""
     try:
         log_file = "access_log.csv"
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -100,11 +90,10 @@ def log_access_event_silent(username, status, role="—"):
             new_entry.to_csv(log_file, mode='a', header=False, index=False, encoding='utf-8-sig')
         else:
             new_entry.to_csv(log_file, mode='w', header=True, index=False, encoding='utf-8-sig')
-    except Exception as e:
-        print(f"[LOG ERROR]: {e}")
+    except Exception:
+        pass
 
 def send_security_alert_silent(attempted_username, ip_address, is_success, role="—"):
-    """Скрыто отправляет почтовое уведомление о входе на адрес из st.secrets."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     target_email = (
@@ -133,7 +122,7 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
     <head>
         <meta charset="utf-8">
         <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; line-height: 1.5; background-color: #f5f5f7; padding: 20px; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1d1d1f; line-height: 1.5; background-color: #f5f5f7; padding: 20px; }}
             .card {{ background: #ffffff; border-radius: 12px; padding: 24px; max-width: 550px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-left: 6px solid {color}; }}
             h3 {{ color: #642A38; margin-top: 0; }}
             .status {{ color: {color}; font-weight: 700; display: inline-block; padding: 4px 8px; background: rgba(0,0,0,0.04); border-radius: 6px; }}
@@ -143,14 +132,14 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
     </head>
     <body>
         <div class="card">
-            <h3>{subject_icon} Служебное уведомление безопасности</h3>
+            <h3>{subject_icon} Служебное уведомление</h3>
             <p><b>Статус попытки:</b> <span class="status">{status_text}</span></p>
             <p><b>Дата и время:</b> {now}</p>
             <p><b>Введенный логин:</b> {safe_username}</p>
             <p><b>Назначенная роль:</b> {safe_role}</p>
             <p><b>IP-адрес пользователя:</b> {safe_ip}</p>
             <hr>
-            <p class="footer">Система мониторинга доступа KRAYVIN</p>
+            <p class="footer">KRAYVIN System Monitoring</p>
         </div>
     </body>
     </html>
@@ -164,10 +153,9 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
                 subject=subject_line, 
                 as_attachment=False
             )
-        except Exception as e:
-            print(f"[SECURITY ALERT EXCEPTION]: {e}")
+        except Exception:
+            pass
 
-# --- 3. ЕДИНАЯ АВТОРИЗАЦИЯ И СЕССИЯ ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = None
@@ -204,7 +192,6 @@ def verify_credentials(username, password):
     send_security_alert_silent(safe_username, ip_addr, is_success=False, role="—")
     return False, None, None
 
-# Экран входа
 if not st.session_state.authenticated:
     st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет KRAYVIN</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
@@ -226,7 +213,6 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль.")
     st.stop()
 
-# --- 4. БОКОВАЯ ПАНЕЛЬ И НАВИГАЦИЯ ---
 logo_path = "КРАЙВИН лого винный квадрат.png"
 if os.path.exists(logo_path):
     st.sidebar.image(logo_path, use_container_width=True)
@@ -251,10 +237,6 @@ active_module = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 
-
-# ==============================================================================
-# МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР ДЕНЕЖНЫХ ПОТОКОВ
-# ==============================================================================
 if active_module == "🧮 Анализ денежных потоков":
     st.title("Анализ денежных потоков и рентабельности")
     st.markdown("Интерактивная финансовая модель для сценарного анализа кассовых разрывов.")
@@ -371,7 +353,6 @@ if active_module == "🧮 Анализ денежных потоков":
         fig5.add_trace(go.Scatter(x=x_labels, y=cum_cf + initial_cash_buffer, mode='lines+markers', name='Накопленный ДС', line=dict(color='#642A38', width=3)))
         st.plotly_chart(fig5, use_container_width=True, key="cf_chart_cum_cf")
 
-    # --- ПАНЕЛЬ ЭКСПОРТА ---
     st.divider()
     st.subheader("📤 Экспорт финансовой модели")
     
@@ -471,10 +452,6 @@ if active_module == "🧮 Анализ денежных потоков":
             else:
                 st.warning("Введите корректный E-mail или проверьте модуль отправки.")
 
-
-# ==============================================================================
-# МОДУЛЬ 2: УПРАВЛЕНИЕ ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТЬЮ
-# ==============================================================================
 elif active_module == "📈 Управление дебиторской задолженностью":
     st.title("📈 Управление дебиторской задолженностью")
 
@@ -528,7 +505,6 @@ elif active_module == "📈 Управление дебиторской задо
             
             st.dataframe(clients_df[['Клиент', 'Общий долг', 'Просрочено', 'Не просрочено']], use_container_width=True)
 
-            # --- ПАНЕЛЬ ЭКСПОРТА ---
             st.divider()
             st.subheader("📤 Экспорт отчета по ПДЗ")
 
