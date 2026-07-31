@@ -10,30 +10,6 @@ import hmac
 import hashlib
 from io import BytesIO
 
-import hashlib
-import hmac
-
-def verify_hash(stored_hash_string, provided_password):
-    """
-    Безопасно сверяет введённый пароль с сохраненным хешем PBKDF2.
-    """
-    try:
-        parts = stored_hash_string.split('$')
-        if len(parts) != 3:
-            return False
-        
-        algo_info, salt_hex, key_hex = parts
-        salt = bytes.fromhex(salt_hex)
-        stored_key = bytes.fromhex(key_hex)
-        
-       computed_key = hashlib.pbkdf2_hmac('sha256', provided_password.encode('utf-8'), salt, 100000)
-        
-      
-        return hmac.compare_digest(stored_key, computed_key)
-    except Exception:
-        return False
-        
-
 # --- ИМПОРТ ВНЕШНИХ МОДУЛЕЙ ---
 try:
     from drive_sync import fetch_latest_report_from_nas
@@ -71,14 +47,32 @@ st.markdown("""
 
 # --- 2. СКРЫТЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ И ЛОГИРОВАНИЯ ---
 
+def verify_hash(stored_hash_string, provided_password):
+    """
+    Безопасно сверяет введённый пароль с сохраненным хешем PBKDF2.
+    Защищено от атак по времени (Timing Attacks).
+    """
+    try:
+        parts = stored_hash_string.split('$')
+        if len(parts) != 3:
+            return False
+        
+        algo_info, salt_hex, key_hex = parts
+        salt = bytes.fromhex(salt_hex)
+        stored_key = bytes.fromhex(key_hex)
+        
+        computed_key = hashlib.pbkdf2_hmac('sha256', provided_password.encode('utf-8'), salt, 100000)
+        return hmac.compare_digest(stored_key, computed_key)
+    except Exception:
+        return False
+
 def get_client_ip():
-    """Скрыто получает IP-адрес с базовой очисткой."""
+    """Скрыто получает публичный IP-адрес клиента с базовой очисткой."""
     try:
         headers = st.context.headers
         if "X-Forwarded-For" in headers:
-            # Берем первый IP и фильтруем от невалидных символов
             raw_ip = headers["X-Forwarded-For"].split(",")[0].strip()
-            return html.escape(raw_ip[:45])  # Ограничение длины IPv6
+            return html.escape(raw_ip[:45])
         elif "Remote-Addr" in headers:
             return html.escape(headers["Remote-Addr"][:45])
     except Exception:
@@ -86,14 +80,13 @@ def get_client_ip():
     return "127.0.0.1 (Local/Unknown)"
 
 def log_access_event_silent(username, status, role="—"):
-    """Фоново записывает событие входа с обработкой ошибок доступа к файлу."""
+    """Фоново записывает событие входа с защитой от CSV-инъекций и ошибок записи."""
     try:
         log_file = "access_log.csv"
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         ip_address = get_client_ip()
         
-        # Экранируем имя пользователя для защиты CSV от инъекций
-        safe_username = html.escape(username[:50])
+        safe_username = html.escape(str(username)[:50])
         
         new_entry = pd.DataFrame([{
             "Timestamp": now,
@@ -108,10 +101,10 @@ def log_access_event_silent(username, status, role="—"):
         else:
             new_entry.to_csv(log_file, mode='w', header=True, index=False, encoding='utf-8-sig')
     except Exception as e:
-        print(f"[LOG ERROR] Не удалось записать лог: {e}")
+        print(f"[LOG ERROR]: {e}")
 
 def send_security_alert_silent(attempted_username, ip_address, is_success, role="—"):
-    """Скрыто отправляет почтовое уведомление о входе с экранированием HTML-инъекций."""
+    """Скрыто отправляет почтовое уведомление о входе на адрес из st.secrets."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     target_email = (
@@ -119,7 +112,6 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
         or st.secrets.get("security", {}).get("alert_email", "e.hasanov@kraivin.ru")
     )
     
-    # Экранирование ввода пользователя от HTML/Header Injection
     safe_username = html.escape(str(attempted_username)[:50]).replace('\n', '').replace('\r', '')
     safe_ip = html.escape(str(ip_address)[:45])
     safe_role = html.escape(str(role)[:30])
@@ -186,31 +178,30 @@ def verify_credentials(username, password):
     users_dict = st.secrets.get("users", {})
     ip_addr = get_client_ip()
     
+    safe_username = html.escape(str(username)[:50]).replace('\n', '').replace('\r', '')
+    
     if username in users_dict:
         user_data = users_dict[username]
-        stored_password = user_data.get("password")
         stored_hash = user_data.get("password_hash")
+        stored_password = user_data.get("password")
         
         is_valid = False
         
-        # 1. Проверка по хешу (Рекомендуется)
         if stored_hash:
-            is_valid = check_password_hash(stored_hash, password)
-        # 2. Обратная совместимость с открытым паролем через защищенное сравнение hmac
+            is_valid = verify_hash(stored_hash, password)
         elif stored_password:
-            is_valid = hmac.compare_digest(stored_password, password)
+            is_valid = hmac.compare_digest(str(stored_password), str(password))
 
         if is_valid:
             role = user_data.get("role", "Сотрудник")
             name = user_data.get("name", username)
             
-            log_access_event_silent(username, "SUCCESS", role)
-            send_security_alert_silent(username, ip_addr, is_success=True, role=role)
+            log_access_event_silent(safe_username, "SUCCESS", role)
+            send_security_alert_silent(safe_username, ip_addr, is_success=True, role=role)
             return True, role, name
 
-    # Если логин не найден или пароль неверный
-    log_access_event_silent(username, "FAILED_LOGIN", "—")
-    send_security_alert_silent(username, ip_addr, is_success=False, role="—")
+    log_access_event_silent(safe_username, "FAILED_LOGIN", "—")
+    send_security_alert_silent(safe_username, ip_addr, is_success=False, role="—")
     return False, None, None
 
 # Экран входа
@@ -260,6 +251,7 @@ active_module = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 
+
 # ==============================================================================
 # МОДУЛЬ 1: ФИНАНСОВЫЙ КАЛЬКУЛЯТОР ДЕНЕЖНЫХ ПОТОКОВ
 # ==============================================================================
@@ -300,7 +292,6 @@ if active_module == "🧮 Анализ денежных потоков":
     st.sidebar.subheader("Условия с покупателями")
     customer_delay_days = st.sidebar.slider("Отсрочка платежа покупателям (дней)", 0, 120, 70, step=5, key="cf_cust_delay")
 
-    # Расчеты
     ru_months_short = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
     x_labels = [f"{ru_months_short[(start_month_idx + i) % 12]} {start_year + ((start_month_idx + i) // 12)}" for i in range(period)]
 
