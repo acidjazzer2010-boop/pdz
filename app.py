@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 import os
 import datetime
 import html
@@ -98,9 +99,12 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
     
     target_email = (
         st.secrets.get("ALERT_EMAIL") 
-        or st.secrets.get("security", {}).get("alert_email", "e.hasanov@kraivin.ru")
+        or st.secrets.get("security", {}).get("alert_email", "")
     )
     
+    if not target_email:
+        return
+
     safe_username = html.escape(str(attempted_username)[:50]).replace('\n', '').replace('\r', '')
     safe_ip = html.escape(str(ip_address)[:45])
     safe_role = html.escape(str(role)[:30])
@@ -193,7 +197,7 @@ def verify_credentials(username, password):
     return False, None, None
 
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет </h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #642A38;'>🔐 Личный кабинет</h2>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
         with st.form("login_form"):
@@ -213,6 +217,9 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль.")
     st.stop()
 
+logo_path = "logo.png"
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, use_container_width=True)
 
 st.sidebar.markdown(f"👤 **{html.escape(st.session_state.name)}**")
 st.sidebar.markdown(f"🔑 Роль: {html.escape(st.session_state.role)}")
@@ -333,7 +340,17 @@ if active_module == "🧮 Анализ денежных потоков":
     with tab1:
         st.markdown("### Динамика ликвидности и остаток средств")
         fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=x_labels, y=cash_balance, mode='lines+markers+text', name='Остаток ДС', text=[f"{v:,.0f}" for v in cash_balance], line=dict(color='#642A38', width=3), fill='tozeroy'))
+        fig1.add_trace(go.Scatter(
+            x=x_labels, 
+            y=cash_balance, 
+            mode='lines+markers+text', 
+            name='Остаток ДС', 
+            text=[f"{v:,.0f}".replace(",", " ") + " ₽" for v in cash_balance],
+            textposition="top center",
+            textfont=dict(size=11, color='#1d1d1f'),
+            line=dict(color='#642A38', width=3), 
+            fill='tozeroy'
+        ))
         fig1.add_hline(y=0, line_dash="dash", line_color="red")
         st.plotly_chart(fig1, use_container_width=True, key="cf_chart_liquidity")
 
@@ -341,13 +358,29 @@ if active_module == "🧮 Анализ денежных потоков":
         st.markdown("### Динамика маржинальности и EBITDA")
         fig3 = go.Figure()
         ebitda_vals = rev - opex - taxes_and_commissions
-        fig3.add_trace(go.Bar(x=x_labels, y=ebitda_vals, name='EBITDA', marker_color='#642A38'))
+        fig3.add_trace(go.Bar(
+            x=x_labels, 
+            y=ebitda_vals, 
+            name='EBITDA', 
+            text=[f"{v:,.0f}".replace(",", " ") + " ₽" for v in ebitda_vals],
+            textposition='outside',
+            marker_color='#642A38'
+        ))
         st.plotly_chart(fig3, use_container_width=True, key="cf_chart_ebitda")
 
     with tab3:
         st.markdown("### Накопленный денежный поток")
         fig5 = go.Figure()
-        fig5.add_trace(go.Scatter(x=x_labels, y=cum_cf + initial_cash_buffer, mode='lines+markers', name='Накопленный ДС', line=dict(color='#642A38', width=3)))
+        fig5.add_trace(go.Scatter(
+            x=x_labels, 
+            y=cum_cf + initial_cash_buffer, 
+            mode='lines+markers+text', 
+            name='Накопленный ДС', 
+            text=[f"{v:,.0f}".replace(",", " ") + " ₽" for v in (cum_cf + initial_cash_buffer)],
+            textposition="top center",
+            textfont=dict(size=11, color='#1d1d1f'),
+            line=dict(color='#642A38', width=3)
+        ))
         st.plotly_chart(fig5, use_container_width=True, key="cf_chart_cum_cf")
 
     st.divider()
@@ -361,6 +394,8 @@ if active_module == "🧮 Анализ денежных потоков":
         "Чистый ДП (₽)": [f"{v:,.0f}".replace(",", " ") for v in net_cf],
         "Остаток ДС (₽)": [f"{v:,.0f}".replace(",", " ") for v in cash_balance]
     })
+
+    interactive_chart_html = pio.to_html(fig1, include_plotlyjs='cdn', full_html=False)
 
     html_cf_report = f"""
     <!DOCTYPE html>
@@ -377,6 +412,7 @@ if active_module == "🧮 Анализ денежных потоков":
             .metric-card {{ background: #fafafa; border: 1px solid #e5e5ea; border-radius: 12px; padding: 16px; border-left: 4px solid #642A38; }}
             .metric-label {{ font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }}
             .metric-value {{ font-size: 18px; font-weight: 700; color: #1d1d1f; }}
+            .chart-box {{ margin: 24px 0; padding: 16px; background: #fafafa; border-radius: 12px; border: 1px solid #e5e5ea; }}
             table {{ width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e5ea; }}
             th {{ background-color: #642A38; color: #ffffff; text-align: left; padding: 12px 16px; font-size: 13px; font-weight: 600; }}
             td {{ padding: 12px 16px; border-bottom: 1px solid #e5e5ea; font-size: 13px; color: #3a3a3c; }}
@@ -409,6 +445,10 @@ if active_module == "🧮 Анализ денежных потоков":
                     <div class="metric-label">Рентабельность</div>
                     <div class="metric-value">{roi:.1f}%</div>
                 </div>
+            </div>
+
+            <div class="chart-box">
+                {interactive_chart_html}
             </div>
 
             {cf_df.to_html(index=False, border=0)}
@@ -514,6 +554,24 @@ elif active_module == "📈 Управление дебиторской задо
             total_portfolio_fmt = f"{total_portfolio:,.2f}".replace(",", " ")
             total_overdue_fmt = f"{total_overdue:,.2f}".replace(",", " ")
 
+            top_debtors = clients_df.sort_values(by='Просрочено', ascending=False).head(10)
+            fig_pdz = go.Figure()
+            fig_pdz.add_trace(go.Bar(
+                x=top_debtors['Клиент'],
+                y=top_debtors['Просрочено'],
+                text=[f"{v:,.0f}".replace(",", " ") + " ₽" for v in top_debtors['Просрочено']],
+                textposition='outside',
+                marker_color='#642A38'
+            ))
+            fig_pdz.update_layout(
+                title="ТОП-10 дебиторов по просроченной задолженности",
+                xaxis_title="Контрагент",
+                yaxis_title="Просрочка (руб)",
+                template="plotly_white",
+                height=400
+            )
+            pdz_chart_html = pio.to_html(fig_pdz, include_plotlyjs='cdn', full_html=False)
+
             html_pdz_report = f"""
             <!DOCTYPE html>
             <html lang="ru">
@@ -529,6 +587,7 @@ elif active_module == "📈 Управление дебиторской задо
                     .metric-card {{ background: #fafafa; border: 1px solid #e5e5ea; border-radius: 12px; padding: 16px; border-left: 4px solid #642A38; }}
                     .metric-label {{ font-size: 12px; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }}
                     .metric-value {{ font-size: 20px; font-weight: 700; color: #1d1d1f; }}
+                    .chart-box {{ margin: 24px 0; padding: 16px; background: #fafafa; border-radius: 12px; border: 1px solid #e5e5ea; }}
                     table {{ width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 16px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e5ea; }}
                     th {{ background-color: #642A38; color: #ffffff; text-align: left; padding: 12px 16px; font-size: 13px; font-weight: 600; }}
                     td {{ padding: 12px 16px; border-bottom: 1px solid #e5e5ea; font-size: 13px; color: #3a3a3c; }}
@@ -558,6 +617,10 @@ elif active_module == "📈 Управление дебиторской задо
                             <div class="metric-label">Всего контрагентов</div>
                             <div class="metric-value">{len(clients_df)}</div>
                         </div>
+                    </div>
+
+                    <div class="chart-box">
+                        {pdz_chart_html}
                     </div>
 
                     {export_df[['Клиент', 'Общий долг (₽)', 'Просрочено (₽)', 'Не просрочено (₽)', 'Просрочено (%)']].to_html(index=False, border=0)}
