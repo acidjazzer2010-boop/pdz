@@ -139,7 +139,7 @@ def send_security_alert_silent(attempted_username, ip_address, is_success, role=
             <p><b>Назначенная роль:</b> {safe_role}</p>
             <p><b>IP-адрес пользователя:</b> {safe_ip}</p>
             <hr>
-            <p class="footer">KRAYVIN System Monitoring</p>
+            <p class="footer">System Monitoring</p>
         </div>
     </body>
     </html>
@@ -213,9 +213,6 @@ if not st.session_state.authenticated:
                     st.error("❌ Неверный логин или пароль.")
     st.stop()
 
-logo_path = "КРАЙВИН лого винный квадрат.png"
-if os.path.exists(logo_path):
-    st.sidebar.image(logo_path, use_container_width=True)
 
 st.sidebar.markdown(f"👤 **{html.escape(st.session_state.name)}**")
 st.sidebar.markdown(f"🔑 Роль: {html.escape(st.session_state.role)}")
